@@ -5,10 +5,10 @@ using NUnit.Framework;
 using UInt32 = StreamLib.Utils.UInt32;
 using UInt64 = StreamLib.Utils.UInt64;
 
-namespace StreamLib.Tests
+namespace StreamLib.Tests.Utils
 {
     [TestFixture]
-    public class ExtensionsTests
+    public class UIntTests
     {
         [Test]
         public void UInt32_NumberOfLeadingZeros()

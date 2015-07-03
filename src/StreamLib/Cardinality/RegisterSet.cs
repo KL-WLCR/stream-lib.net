@@ -12,50 +12,40 @@
         /// </summary>
         public readonly uint[] M;
 
-        public RegisterSet(int count)
-            : this(count, null)
-        {
-        }
-
-        public RegisterSet(int count, uint[] initialValues)
+        public RegisterSet(int count, uint[] initialValues = null)
         {
             Count = count;
             M = initialValues ?? new uint[GetSizeForCount(count)];
         }
 
-        public static int GetBits(int count)
-        {
-            return count/Log2BitsPerWord;
-        }
-
         public static int GetSizeForCount(int count)
         {
-            int bits = GetBits(count);
+            int bits = count / Log2BitsPerWord;
             if (bits == 0)
                 return 1;
-            if (bits%32 == 0)
+            if (bits % 32 == 0)
                 return bits;
             return bits + 1;
         }
 
         public void Set(uint position, uint value)
         {
-            uint bucketPos = position/Log2BitsPerWord;
-            int shift = (int)(RegisterSize*(position - (bucketPos*Log2BitsPerWord)));
+            uint bucketPos = position / Log2BitsPerWord;
+            int shift = (int)(RegisterSize * (position - (bucketPos * Log2BitsPerWord)));
             M[bucketPos] = (M[bucketPos] & (uint)~(0x1f << shift)) | (value << shift);
         }
 
         public uint Get(uint position)
         {
-            uint bucketPos = position/Log2BitsPerWord;
-            int shift = (int)(RegisterSize*(position - (bucketPos*Log2BitsPerWord)));
+            uint bucketPos = position / Log2BitsPerWord;
+            int shift = (int)(RegisterSize * (position - (bucketPos * Log2BitsPerWord)));
             return (M[bucketPos] & (uint)(0x1f << shift)) >> shift; // todo was >>>
         }
 
         public bool UpdateIfGreater(uint position, uint value)
         {
             uint bucket = position/Log2BitsPerWord;
-            int shift = (int) (RegisterSize*(position - (bucket*Log2BitsPerWord)));
+            int shift = (int) (RegisterSize * (position - (bucket * Log2BitsPerWord)));
             int mask = 0x1F << shift;
 
             // Use long to avoid sign issues with the left-most shift

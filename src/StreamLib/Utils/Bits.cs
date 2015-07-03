@@ -4,11 +4,11 @@ namespace StreamLib.Utils
 {
     public static class Bits
     {
-        public static uint[] GetBits(byte[] mBytes)
+        public static uint[] GetBits(byte[] bytes)
         {
-            int bitSize = mBytes.Length/4;
+            int bitSize = bytes.Length / 4;
             uint[] bits = new uint[bitSize];
-            using (var ms = new MemoryStream(mBytes))
+            using (var ms = new MemoryStream(bytes))
             using (var br = new BinaryReader(ms))
             {
                 for (int i = 0; i < bitSize; i++)
@@ -16,20 +16,5 @@ namespace StreamLib.Utils
             }
             return bits;
         }
-
-        /**
-         * This method might be better described as
-         * "byte array to int array" or "data input to int array"
-        */
-        //public static int[] GetBits(DataInput dataIn, int byteLength)
-        //{
-        //    int bitSize = byteLength/4;
-        //    int[] bits = new int[bitSize];
-        //    for (int i = 0; i < bitSize; i++)
-        //    {
-        //        bits[i] = dataIn.readInt();
-        //    }
-        //    return bits;
-        //}
     }
 }

@@ -52,10 +52,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Cardinality\RegisterSetTests.cs" />
-    <Compile Include="ExtensionsTests.cs" />
+    <Compile Include="Utils\UIntTests.cs" />
     <Compile Include="Cardinality\HyperLogLogPlusTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TestUtils.cs" />
+    <Compile Include="Utils\VarintTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

@@ -16,14 +16,15 @@ namespace StreamLib.Cardinality
             Normal = 1
         }
 
-        /** Used to mark codec version for serialization. */
+        // used to mark codec version for serialization
         const int Version = 2;
 
-        readonly uint[] _emptySparse = new uint[0];
         const int InitialTempSetCapacity = 4;
 
-        // Ratio of the sparse set size to the temp set size.
+        // ratio of the sparse set size to the temp set size.
         const int SparseSetTempSetRatio = 4;
+
+        readonly uint[] _emptySparse = new uint[0];
 
         // data from Appendix to HyperLogLog in Practice: Algorithmic Engineering of a State of the Art Cardinality Estimation Algorithm
         // http://goo.gl/iU8Ig
@@ -96,33 +97,32 @@ namespace StreamLib.Cardinality
         };
 
         Format _format;
+
         RegisterSet _registerSet;
+        uint[] _sparseSet;
+
         readonly uint _m;
         readonly uint _p;
 
-        //Sparse versions of m and p
+        // sparse versions of m and p
         readonly int _sm;
         readonly uint _sp;
 
-        readonly double _alphaMM;
+        readonly double _alphamm;
 
-        //How big the sparse set is allowed to get before we convert to 'normal'
+        // how big the sparse set is allowed to get before we convert to 'normal'
         readonly int _sparseSetThreshold;
 
         uint[] _tmpSet;
         int _tmpIndex = 0;
-        uint[] _sparseSet;
 
-        /**
-         * Basic constructor for creating a instance that supports sparse and normal
-         * representations. The values of {@code p} and
-         * {@code sp} define the precision of the Normal and Sparse set
-         * representations for the data structure.  {@code p} must be a value
-         * between 4 and {@code sp} and {@code sp} must be less than 32.
-         *
-         * @param p  - the precision value for the normal set
-         * @param sp - the precision value for the sparse set
-         */
+        /// <summary>Basic constructor for creating a instance that supports sparse and normal
+        /// representations. The values of <paramref name="p"/> and
+        /// <paramref name="sp"/> define the precision of the Normal and Sparse set
+        /// representations for the data structure. <paramref name="p"/> must be a value
+        /// between 4 and <paramref name="sp"/> and <paramref name="sp"/> must be less than 32.</summary>
+        /// <param name="p">the precision value for the normal set</param>
+        /// <param name="sp">the precision value for the sparse set</param>
         public HyperLogLogPlus(uint p, uint sp)
             : this(p, sp, null)
         {
@@ -159,30 +159,32 @@ namespace StreamLib.Cardinality
                     _registerSet = new RegisterSet((int)Math.Pow(2, p));
                 }
             }
-
-            _alphaMM = GetAlphaMM(p, _m);
+            _alphamm = GetAlphamm(p, _m);
         }
 
-        public bool OfferHashed(ulong hashedLong)
+        /// <summary>Offer the value as a ulong hash value</summary>
+        /// <param name="hash">the hash of the item to offer to the estimator</param>
+        /// <returns>false if the value returned by Cardinality() is unaffected by the appearance of hash in the stream</returns>
+        public bool OfferHashed(ulong hash)
         {
             switch (_format)
             {
                 case Format.Normal:
                     // find first p bits of x
-                    ulong idx = hashedLong >> (int)(64 - _p); // todo was >>>
-                    // Ignore the first p bits (the idx), and then find the number of leading zeros
-                    // Push a 1 to where the bit string would have ended if we didnt just push the idx out of the way
-                    // A one is always added to runLength for estimation calculation purposes
-                    uint runLength = UInt64.NumberOfLeadingZeros((hashedLong << (int)_p) | 1U << (int)(_p - 1)) + 1;
+                    ulong idx = hash >> (int)(64 - _p);
+                    // ignore the first p bits (the idx), and then find the number of leading zeros
+                    // push a 1 to where the bit string would have ended if we didnt just push the idx out of the way
+                    // a one is always added to runLength for estimation calculation purposes
+                    uint runLength = UInt64.NumberOfLeadingZeros((hash << (int)_p) | 1U << (int)(_p - 1)) + 1;
                     return _registerSet.UpdateIfGreater((uint)idx, runLength);
                 case Format.Sparse:
-                    // Call the sparse encoding scheme which attempts to stuff as much helpful data into 32 bits as possible
-                    uint k = EncodeHash(hashedLong, _p, _sp);
+                    // call the sparse encoding scheme which attempts to stuff as much helpful data into 32 bits as possible
+                    uint k = EncodeHash(hash, _p, _sp);
                     if (_tmpSet == null)
                     {
                         _tmpSet = new uint[InitialTempSetCapacity];
                     }
-                    // Put the encoded data into the temp set
+                    // put the encoded data into the temp set
                     _tmpSet[_tmpIndex++] = k;
                     if (_tmpIndex >= _tmpSet.Length)
                     {
@@ -193,12 +195,9 @@ namespace StreamLib.Cardinality
             return false;
         }
 
-        /**
-         * Gather the cardinality estimate from this estimator.
-         * <p/>
-         * Has two procedures based on current mode. 'Normal' mode works similar to HLL but has some
-         * new bias corrections. 'Sparse' mode is linear counting.
-         */
+        /// <summary>Gather the cardinality estimate from this estimator.
+        /// Has two procedures based on current mode. 'Normal' mode works similar to HLL but has some
+        /// new bias corrections. 'Sparse' mode is linear counting.</summary>
         public long Cardinality()
         {
             if (_format == Format.Sparse)
@@ -221,7 +220,7 @@ namespace StreamLib.Cardinality
                         }
                     }
 
-                    double estimate = _alphaMM * (1 / registerSum);
+                    double estimate = _alphamm * (1 / registerSum);
                     double estimatePrime = estimate;
                     if (estimate <= (5 * _m))
                     {
@@ -289,7 +288,6 @@ namespace StreamLib.Cardinality
         {
             int[] nearest = new int[6];
             int i = 0;
-            //for (Integer index : distanceMap.values()) {
             foreach (int index in distanceMap.Values)
             {
                 nearest[i++] = index;
@@ -312,7 +310,7 @@ namespace StreamLib.Cardinality
             return biasTotal / nearestNeighbors.Length;
         }
 
-        static double GetAlphaMM(uint p, uint m)
+        static double GetAlphamm(uint p, uint m)
         {
             // See the paper.
             switch (p)
@@ -328,65 +326,49 @@ namespace StreamLib.Cardinality
             }
         }
 
-        /**
-         * Encode the sp length idx and, if necessary, the run length.
-         * <p/>
-         * Start with the 64 bit hash as x.
-         * <p/>
-         * Find all the bits that belong in the first sp (roughly 25) bits. (This is idx')
-         * Get rid of the first p (roughly 18) bits of those. (Those were idx (not prime))
-         * <p/>
-         * If all the remaining bits are zero then we are going to need to find and encode the
-         * full run length of leading zeros, but this only happens once in 2 ^ (sp - p) or roughly
-         * 2 ^ 7 times.
-         * <p/>
-         * If at least one of them is not zero, then since the run length is determined by bits
-         * after p and the idx' contains the first (sp - p) bits of those, then just by putting idx'
-         * in the encoding, we will also be giving it all the information it needs to find the run length.
-         * <p/>
-         * The relationship looks like this:
-         * <p/>
-         * *******************************************************   <- hashed length of bits
-         * | p bits = idx ||     look for leading zeros here     |
-         * |      sp bits = idx'     |
-         * | all 0s? |
-         * <p/>
-         * If we have idx', we could theoretically scan it (as per zeroTest) when unencoding and therefore know whether
-         * to look for the extra run length information. However, for now we have followed the authors of
-         * the paper and put this information in a flag bit at the end of the encoding.
-         * <p/>
-         * Based on this flag, we know whether to adjust for the missing run length bits. We could also
-         * use this flag to compress all the zeros in "| all 0s? |", but saving a byte or so once in 128
-         * times is less than the 120 bits spent on the flag elsewhere. Of course, after compression, the losses
-         * are not quite so large either way.
-         * <p/>
-         * The encoding scheme now looks like:
-         * <p/>
-         * ********************************* <- smaller length of bits (half, but not to scale)
-         * | empty ||       sp bits     ||F|
-         * |  p bits  || has 1 ||0|
-         * <p/>
-         * <p/>
-         * or if the run length was needed (ie 'all 0s?' was indeed all 0s):
-         * <p/>
-         * *********************************
-         * |      sp bits    || run len ||F|
-         * |  p bits ||  0s  |           |1|
-         * <p/>
-         * <p/>
-         * The other notable encoding feature is the inversion of the run length, which just lets the lists
-         * be sorted in a convenient way. (Could alternatively sort in reverse, and use descending deltas).
-         *
-         * @param x  the hash bits
-         * @param p  the 'normal' mode precision
-         * @param sp the 'sparse' mode precision
-         * @return the encoded data as an integer
-         */
+        /// <summary>
+        /// Encode the sp length idx and, if necessary, the run length.
+        /// Start with the 64 bit hash as x.
+        /// Find all the bits that belong in the first sp (roughly 25) bits. (This is idx')
+        /// Get rid of the first p (roughly 18) bits of those. (Those were idx (not prime))
+        /// If all the remaining bits are zero then we are going to need to find and encode the
+        /// full run length of leading zeros, but this only happens once in 2 ^ (sp - p) or roughly
+        /// 2 ^ 7 times.
+        /// If at least one of them is not zero, then since the run length is determined by bits
+        /// after p and the idx' contains the first (sp - p) bits of those, then just by putting idx'
+        /// in the encoding, we will also be giving it all the information it needs to find the run length.
+        /// The relationship looks like this:
+        /// *******************************************************   - hashed length of bits
+        /// | p bits = idx ||     look for leading zeros here     |
+        /// |      sp bits = idx'     |
+        /// | all 0s? |
+        /// If we have idx', we could theoretically scan it (as per zeroTest) when unencoding and therefore know whether
+        /// to look for the extra run length information. However, for now we have followed the authors of
+        /// the paper and put this information in a flag bit at the end of the encoding.
+        /// Based on this flag, we know whether to adjust for the missing run length bits. We could also
+        /// use this flag to compress all the zeros in "| all 0s? |", but saving a byte or so once in 128
+        /// times is less than the 120 bits spent on the flag elsewhere. Of course, after compression, the losses
+        /// are not quite so large either way.
+        /// The encoding scheme now looks like:
+        /// ********************************* - smaller length of bits (half, but not to scale)
+        /// | empty ||       sp bits     ||F|
+        /// |  p bits  || has 1 ||0|
+        /// or if the run length was needed (ie 'all 0s?' was indeed all 0s):
+        /// *********************************
+        /// |      sp bits    || run len ||F|
+        /// |  p bits ||  0s  |           |1|
+        /// The other notable encoding feature is the inversion of the run length, which just lets the lists
+        /// be sorted in a convenient way. (Could alternatively sort in reverse, and use descending deltas).
+        /// </summary>
+        /// <param name="x">the hash bits</param>
+        /// <param name="p">the 'normal' mode precision</param>
+        /// <param name="sp">the 'sparse' mode precision</param>
+        /// <returns>the encoded data as an integer</returns>
         static uint EncodeHash(ulong x, uint p, uint sp)
         {
-            // Get the idx' (the first sp bits) by pushing the rest to the right (into oblivion >:D)
+            // get the idx' (the first sp bits) by pushing the rest to the right (into oblivion >:D)
             uint idx = (uint)(x >> (int)(64 - sp)); // todo was >>>
-            // Push to the left for all the spaces you know are between the start of your bits and the left 'wall'
+            // push to the left for all the spaces you know are between the start of your bits and the left 'wall'
             // then push p bits off as well so we have just our friend "all 0s?"
             uint zeroTest = 0;
             if (p < sp)
@@ -395,9 +377,9 @@ namespace StreamLib.Cardinality
             }
             if (zeroTest == 0)
             {
-                // See offer
+                // see offer
                 uint runLength = UInt64.NumberOfLeadingZeros((x << (int)p) | 1U << (int)(p - 1)) + 1;
-                // Invert run length by xoring it with a bunch of 1s
+                // invert run length by xoring it with a bunch of 1s
                 uint invrl = runLength ^ 63;
                 return ((
                                 (idx << 6) // push the idx left 6 times to make room to put in the run length
@@ -405,20 +387,18 @@ namespace StreamLib.Cardinality
                            << 1)           // move left again to make room for the flag bit
                        | 1;                // merge in the flag bit (set to one because we needed the run length)
             }
-            // Just push left once. A zero will appear by default and that's the flag we want.
+            // just push left once. A zero will appear by default and that's the flag we want.
             return idx << 1;
         }
 
-        /**
-         * Script-esque function that handles preparing to and executing merging the
-         * sparse set and the temp list. Set up the delta encoding, sort the temp
-         * list, merge the lists, blow up the temp list.
-         *
-         * The temp set grows in size at a rate proportional to the current
-         * size of the sparse set. The size ratio of the temp set to the sparse set
-         * is determined by {@link #SPARSE_SET_TEMP_SET_RATIO}. The temp set will not
-         * grow unless it is currently smaller by 1/2 of the target size.
-         */
+        // Script-esque function that handles preparing to and executing merging the
+        // sparse set and the temp list. Set up the delta encoding, sort the temp
+        // list, merge the lists, blow up the temp list.
+        //
+        // The temp set grows in size at a rate proportional to the current
+        // size of the sparse set. The size ratio of the temp set to the sparse set
+        // is determined by {@link #SPARSE_SET_TEMP_SET_RATIO}. The temp set will not
+        // grow unless it is currently smaller by 1/2 of the target size.
         void MergeTempList()
         {
             if (_tmpIndex > 0)
@@ -476,8 +456,8 @@ namespace StreamLib.Cardinality
             return ToIntArray(sortedList);
         }
 
-        /** Get the idx' from an encoding. */
         // todo inline?
+        // get the idx' from an encoding.
         static uint GetSparseIndex(uint k)
         {
             if ((k & 1) == 1)
@@ -495,26 +475,23 @@ namespace StreamLib.Cardinality
             return ret;
         }
 
-        /**
-         * Batch merges the sparse set with the temporary list. Usually called when the temporary
-         * list fills up, but may also be needed when suddenly converting to normal or producing a
-         * cardinality estimate.
-         * <p/>
-         * It works very similarly to the merge part of merge sort with some key differences:
-         * We don't care about the kind of order the idxs appear in, only that they are in SOME order.
-         * This is because we only need to be sure that we detect when they are the same. So if idx: '001' appears
-         * first and idx: '002' appears last, that is fine as long as that behavior is the same for both lists.
-         * <p/>
-         * We do not allow duplicate entries (we are making a set after all), and collisions are resolved by run
-         * length. However, most of the time the run length will be the same if two idx' are the same. Only in the
-         * 1 in ~128 chance case of 'all 0s?' will they differ. Because the rest of the encoding is the same we can
-         * do comparisons without extracting the run length and because of our earlier inversion trick, the highest
-         * run length duplicates will appear first. So we take those and ignore any that follow with the same idx'.
-         *
-         * @param set sparse set
-         * @param tmp list to be merged
-         * @return the new sparse set
-         */
+        /// <summary>Batch merges the sparse set with the temporary list. Usually called when the temporary
+        /// list fills up, but may also be needed when suddenly converting to normal or producing a
+        /// cardinality estimate.
+        ///
+        /// It works very similarly to the merge part of merge sort with some key differences:
+        /// We don't care about the kind of order the idxs appear in, only that they are in SOME order.
+        /// This is because we only need to be sure that we detect when they are the same. So if idx: '001' appears
+        /// first and idx: '002' appears last, that is fine as long as that behavior is the same for both lists.
+        ///
+        /// We do not allow duplicate entries (we are making a set after all), and collisions are resolved by run
+        /// length. However, most of the time the run length will be the same if two idx' are the same. Only in the
+        /// 1 in ~128 chance case of 'all 0s?' will they differ. Because the rest of the encoding is the same we can
+        /// do comparisons without extracting the run length and because of our earlier inversion trick, the highest
+        /// run length duplicates will appear first. So we take those and ignore any that follow with the same idx'.</summary>
+        /// <param name="set">sparse set</param>
+        /// <param name="tmp">list to be merged</param>
+        /// <returns>the new sparse set</returns>
         static uint[] Merge(uint[] set, uint[] tmp)
         {
             var newSet = new List<uint>();
@@ -564,14 +541,11 @@ namespace StreamLib.Cardinality
             return ToIntArray(newSet);
         }
 
-        /**
-         * Eats up the inferior duplicates from the temp list
-         *
-         * @param tmp    tmp list
-         * @param tmpIdx the idx' we want to consume
-         * @param tmpi   the current tmp list index
-         * @return the new tmp list index
-         */
+        /// <summary>Eats up the inferior duplicates from the temp list</summary>
+        /// <param name="tmp">tmp list</param>
+        /// <param name="tmpIdx">the idx' we want to consume</param>
+        /// <param name="tmpi">the current tmp list index</param>
+        /// <returns>the new tmp list index</returns>
         static int ConsumeDuplicates(uint[] tmp, uint tmpIdx, int tmpi)
         {
             while (tmpi < tmp.Length)
@@ -587,13 +561,10 @@ namespace StreamLib.Cardinality
             return tmpi;
         }
 
-        /**
-         * Converts the mode of this estimator from 'sparse' to 'normal'.
-         * <p/>
-         * Each member of the set has its longer 'sparse precision (sp)' length idx
-         * truncated to length p and the associated run length is placed into a register.
-         * Collisions are resolved by merely taking the max.
-         */
+        // Converts the mode of this estimator from 'sparse' to 'normal'.
+        // Each member of the set has its longer 'sparse precision (sp)' length idx
+        // truncated to length p and the associated run length is placed into a register.
+        // Collisions are resolved by merely taking the max.
         void ConvertToNormal()
         {
             _registerSet = new RegisterSet((int)Math.Pow(2, _p));
@@ -608,24 +579,18 @@ namespace StreamLib.Cardinality
             _sparseSet = null;
         }
 
-        /**
-         * Returns the idx from an encoding (note this is idx and not idx prime).
-         *
-         * @param k encoded data
-         * @param p 'normal' precision
-         */
+        /// <summary>Returns the idx from an encoding (note this is idx and not idx prime).</summary>
+        /// <param name="k">encoded data</param>
+        /// <param name="p">'normal' precision</param>
         uint GetIndex(uint k, uint p)
         {
             uint sparseIndex = GetSparseIndex(k);
             return sparseIndex >> (int)(_sp - p); // todo was >>>
         }
 
-        /**
-         * More of less the opposite of the encoding function but just for getting out run lengths.
-         *
-         * @param k encoded int
-         * @return run length
-         */
+        /// <summary>More of less the opposite of the encoding function but just for getting out run lengths.</summary>
+        /// <param name="k">encoded int</param>
+        /// <returns>run length</returns>
         uint DecodeRunLength(uint k)
         {
             if ((k & 1) == 1) //checking the flag bit
@@ -685,20 +650,14 @@ namespace StreamLib.Cardinality
         // todo override to string?
         // todo sort methods
 
-        /**
-         * Merge this HLL++ with a bunch of others! The power of minions!
-         * <p/>
-         * Most of the logic consists of case analysis about the state of this HLL++ and each one it wants to merge
-         * with. If either of them is 'normal' mode then the other converts to 'normal' as well. A touching sacrifice.
-         * 'Normal's combine just like regular HLL estimators do.
-         * <p/>
-         * If they happen to be both sparse, then it checks if their combined size would be too large and if so, they get
-         * relegated to normal mode anyway. Otherwise, the mergeEstimators function is called, and a new sparse HLL++ is born.
-         *
-         * @param estimators the estimators to merge with this one
-         * @return a new estimator with their combined knowledge
-         * @throws CardinalityMergeException
-         */
+        /// <summary>Merge this HLL++ with a bunch of others.
+        /// Most of the logic consists of case analysis about the state of this HLL++ and each one it wants to merge
+        /// with. If either of them is 'normal' mode then the other converts to 'normal' as well. A touching sacrifice.
+        /// 'Normal's combine just like regular HLL estimators do.
+        /// If they happen to be both sparse, then it checks if their combined size would be too large and if so, they get
+        /// relegated to normal mode anyway. Otherwise, the mergeEstimators function is called, and a new sparse HLL++ is born.</summary>
+        /// <param name="estimators">the estimators to merge with this one</param>
+        /// <returns>a new estimator with their combined knowledge</returns>
         public HyperLogLogPlus Merge(params HyperLogLogPlus[] estimators)
         {
             var merged = new HyperLogLogPlus(_p, _sp);
@@ -712,17 +671,11 @@ namespace StreamLib.Cardinality
             return merged;
         }
 
-        /**
-          * Add all the elements of the other set to this set.
-          * <p/>
-          * If possible, the sparse mode is protected. A switch to the normal mode
-          * is triggered only if the resulting set exceed the threshold.
-          * <p/>
-          * This operation does not imply a loss of precision.
-          *
-          * @param other A compatible Hyperloglog++ instance (same p and sp)
-          * @throws CardinalityMergeException if other is not compatible
-          */
+        /// <summary>Add all the elements of the other set to this set.
+        /// If possible, the sparse mode is protected. A switch to the normal mode
+        /// is triggered only if the resulting set exceed the threshold.
+        /// This operation does not imply a loss of precision.</summary>
+        /// <param name="other">other A compatible Hyperloglog++ instance (same p and sp)</param>
         public void AddAll(HyperLogLogPlus other)
         {
             if (other.SizeOf() != SizeOf())
@@ -774,14 +727,11 @@ namespace StreamLib.Cardinality
             throw new Exception("Unhandled HLL++ merge combination");
         }
 
-        /**
-         * Merge this HLL++ instance with another! The power of friends! This works
-         * very similarly to the merge with temp list function. However, in this
-         * case, both lists will need their own delta decoding and neither will have
-         * to worry about consuming duplicates.
-         *
-         * @return the new sparse set
-         */
+        /// <summary>Merge this HLL++ instance with another! The power of friends! This works
+        /// very similarly to the merge with temp list function. However, in this
+        /// case, both lists will need their own delta decoding and neither will have
+        /// to worry about consuming duplicates.</summary>
+        /// <returns>the new sparse set</returns>
         uint[] MergeEstimators(HyperLogLogPlus other)
         {
             uint[] tmp = other._sparseSet;
@@ -829,7 +779,7 @@ namespace StreamLib.Cardinality
             return ToIntArray(newSet);
         }
 
-        public int SizeOf()
+        int SizeOf()
         {
             if (_registerSet == null)
                 return 4 * RegisterSet.GetSizeForCount((int) Math.Pow(2, _p)); // todo _m?
