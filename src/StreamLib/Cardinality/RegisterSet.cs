@@ -18,6 +18,11 @@
             M = initialValues ?? new uint[GetSizeForCount(count)];
         }
 
+        public override string ToString()
+        {
+            return string.Format("{{ Count = {0}, M.len = {1}}}", Count, M.Length);
+        }
+
         public static uint GetSizeForCount(uint count)
         {
             uint bits = count / Log2BitsPerWord;

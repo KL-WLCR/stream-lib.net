@@ -21,10 +21,10 @@ namespace StreamLib.Cardinality
 
         const int InitialTempSetCapacity = 4;
 
-        // ratio of the sparse set size to the temp set size.
+        // ratio of the sparse set size to the temp set size
         const int SparseSetTempSetRatio = 4;
 
-        readonly uint[] _emptySparse = new uint[0];
+        static readonly uint[] EmptySparse = new uint[0];
 
         // data from Appendix to HyperLogLog in Practice: Algorithmic Engineering of a State of the Art Cardinality Estimation Algorithm
         // http://goo.gl/iU8Ig
@@ -110,7 +110,7 @@ namespace StreamLib.Cardinality
 
         readonly double _alphamm;
 
-        // how big the sparse set is allowed to get before we convert to 'normal'
+        // how big the sparse set is allowed to get before we convert to Normal
         readonly uint _sparseSetThreshold;
 
         uint[] _tmpSet;
@@ -153,13 +153,11 @@ namespace StreamLib.Cardinality
                     _format = Format.Sparse;
                     _sp = sp;
                     _sm = (uint)Math.Pow(2, sp);
-                    _sparseSet = sparseSet ?? _emptySparse;
+                    _sparseSet = sparseSet ?? EmptySparse;
                     _sparseSetThreshold = (uint)(_m * 0.75);
                 }
                 else
-                {
                     _registerSet = new RegisterSet(_m);
-                }
             }
             _alphamm = GetAlphamm(p, _m);
         }
@@ -194,9 +192,35 @@ namespace StreamLib.Cardinality
             return false;
         }
 
-        /// <summary>Gather the cardinality estimate from this estimator.
+        /// <summary>
+        /// Merge this HLL++ with a bunch of others.
+        /// Most of the logic consists of case analysis about the state of this HLL++ and each one it wants to merge with.
+        /// If either of them is 'normal' mode then the other converts to 'normal' as well. A touching sacrifice.
+        /// 'Normal's combine just like regular HLL estimators do.
+        /// If they happen to be both sparse, then it checks if their combined size would be too large and if so, they get
+        /// relegated to normal mode anyway. Otherwise, the mergeEstimators function is called, and a new sparse HLL++ is born.
+        /// </summary>
+        /// <param name="estimators">the estimators to merge with this one</param>
+        /// <returns>a new estimator with their combined knowledge</returns>
+        public HyperLogLogPlus Merge(params HyperLogLogPlus[] estimators)
+        {
+            var merged = new HyperLogLogPlus(_p, _sp);
+            merged.AddAll(this);
+
+            if (estimators == null)
+                return merged;
+
+            foreach (var hll in estimators)
+                merged.AddAll(hll);
+
+            return merged;
+        }
+
+        /// <summary>
+        /// Gather the cardinality estimate from this estimator.
         /// Has two procedures based on current mode. 'Normal' mode works similar to HLL but has some
-        /// new bias corrections. 'Sparse' mode is linear counting.</summary>
+        /// new bias corrections. 'Sparse' mode is linear counting.
+        /// </summary>
         public long Cardinality()
         {
             if (_format == Format.Sparse)
@@ -230,6 +254,176 @@ namespace StreamLib.Cardinality
                     return (long)Math.Round(LinearCounting(_sm, _sm - _sparseSet.Length));
             }
             return 0;
+        }
+
+        public byte[] ToBytes()
+        {
+            using (var ms = new MemoryStream())
+            using (var bw = new BinaryWriter(ms))
+            {
+                // write version flag (always negative)
+                bw.Write(-Version);
+                Varint.WriteUInt32(_p, ms);
+                Varint.WriteUInt32(_sp, ms);
+                if (_format == Format.Sparse)
+                    MergeTempList();
+
+                switch (_format)
+                {
+                    case Format.Normal:
+                        Varint.WriteUInt32(0, ms);
+                        Varint.WriteUInt32((uint)_registerSet.M.Length * 4, ms);
+                        foreach (var x in _registerSet.M)
+                            bw.Write(x);
+                        break;
+                    case Format.Sparse:
+                        Varint.WriteUInt32(1, ms);
+                        Varint.WriteUInt32((uint)_sparseSet.Length, ms);
+                        uint prevMergedDelta = 0;
+                        foreach (var k in _sparseSet)
+                        {
+                            Varint.WriteUInt32((uint)(k - prevMergedDelta), ms);
+                            prevMergedDelta = k;
+                        }
+                        break;
+                }
+                return ms.ToArray();
+            }
+        }
+
+        public static HyperLogLogPlus FromBytes(byte[] bytes)
+        {
+            using (var ms = new MemoryStream(bytes))
+            {
+                ms.Seek(4, SeekOrigin.Begin); // skip version, we support only single version for now (ver2 of stream-lib)
+                uint p = Varint.ReadUInt32(ms);
+                uint sp = Varint.ReadUInt32(ms);
+                var format = (Format)Varint.ReadUInt32(ms);
+                if (format == Format.Sparse)
+                {
+                    uint size = Varint.ReadUInt32(ms);
+                    byte[] longArrayBytes = new byte[size];
+                    ms.Read(longArrayBytes, 0, (int)size);
+                    var registerSet = new RegisterSet((uint)Math.Pow(2, p), Bits.GetBits(longArrayBytes));
+                    var hll = new HyperLogLogPlus(p, sp, registerSet)
+                    {
+                        _format = Format.Normal
+                    };
+                    return hll;
+                }
+                else
+                {
+                    uint[] rehydratedSparseSet = new uint[Varint.ReadUInt32(ms)];
+                    uint prevDeltaRead = 0;
+                    for (int i = 0; i < rehydratedSparseSet.Length; ++i)
+                    {
+                        uint nextVal = Varint.ReadUInt32(ms) + prevDeltaRead;
+                        rehydratedSparseSet[i] = nextVal;
+                        prevDeltaRead = nextVal;
+                    }
+                    var hll = new HyperLogLogPlus(p, sp, rehydratedSparseSet)
+                    {
+                        _format = Format.Sparse
+                    };
+                    return hll;
+                }
+            }
+        }
+
+        public override string ToString()
+        {
+            return string.Format("{{ p: {0}, sp: {1}, Format: {2}, RegisterSet: {3}, SparseSet.len: {4} }}", _p, _sp, _format, _registerSet, _sparseSet.Length);
+        }
+
+        public override bool Equals(object other)
+        {
+            var otherHll = other as HyperLogLogPlus;
+            return otherHll != null && Equals(otherHll);
+        }
+
+        public bool Equals(HyperLogLogPlus other)
+        {
+            if (other == null)
+                return false;
+
+            if (_format == Format.Sparse)
+                MergeTempList();
+
+            if (other._format == Format.Sparse)
+                other.MergeTempList();
+
+            if (other._format != _format)
+                return false;
+
+            return _format == Format.Normal
+                ? _registerSet.M.SequenceEqual(other._registerSet.M)
+                : _sparseSet.SequenceEqual(other._sparseSet);
+        }
+
+        public override int GetHashCode()
+        {
+            if (_format == Format.Sparse)
+                MergeTempList();
+            if (_format == Format.Normal)
+                return HashCode.ForArray(_registerSet.M);
+            return HashCode.ForArray(_sparseSet);
+        }
+
+        /// <summary>
+        /// Add all the elements of the other set to this set.
+        /// If possible, the sparse mode is protected. A switch to the normal mode
+        /// is triggered only if the resulting set exceed the threshold.
+        /// This operation does not imply a loss of precision.
+        /// </summary>
+        /// <param name="other">a compatible Hyperloglog++ instance (same p and sp)</param>
+        internal void AddAll(HyperLogLogPlus other)
+        {
+            if (other.SizeOf() != SizeOf())
+                throw new Exception("Cannot merge estimators of different sizes");
+
+            if (_format == Format.Sparse)
+                MergeTempList();
+            if (other._format == Format.Sparse)
+                other.MergeTempList();
+
+            if ((_format == Format.Normal) && (other._format == Format.Normal))
+            {
+                _registerSet.Merge(other._registerSet);
+                return;
+            }
+
+            if ((_format == Format.Sparse) && (other._format == Format.Sparse))
+            {
+                _sparseSet = MergeEstimators(other);
+                if (_sparseSet.Length > _sparseSetThreshold)
+                    ConvertToNormal();
+                return;
+            }
+
+            if ((_format == Format.Sparse) && (other._format == Format.Normal))
+            {
+                ConvertToNormal();
+                _registerSet.Merge(other._registerSet);
+                return;
+            }
+
+            if ((_format == Format.Normal) && (other._format == Format.Sparse))
+            {
+                // Iterating over other's sparse set and updating only required indexes
+                // of this' register set is several orders of magnitude faster than copying
+                // and converting other to normal mode. This use case is quite common since
+                // we tend to aggregate small sets to large sets.
+                for (var i = 0; i < other._sparseSet.Length; ++i)
+                {
+                    uint k = other._sparseSet[i];
+                    uint idx = other.GetIndex(k, _p);
+                    uint r = other.DecodeRunLength(k);
+                    _registerSet.UpdateIfGreater(idx, r);
+                }
+                return;
+            }
+
+            throw new Exception("Unhandled HLL++ merge combination"); // todo add format, p, sp to msg
         }
 
         static double LinearCounting(uint m, double V)
@@ -289,7 +483,6 @@ namespace StreamLib.Cardinality
 
         static double GetAlphamm(uint p, uint m)
         {
-            // see the paper
             switch (p)
             {
                 case 4:
@@ -370,7 +563,7 @@ namespace StreamLib.Cardinality
         //
         // The temp set grows in size at a rate proportional to the current
         // size of the sparse set. The size ratio of the temp set to the sparse set
-        // is determined by {@link #SPARSE_SET_TEMP_SET_RATIO}. The temp set will not
+        // is determined by SparseSetTempSetRatio. The temp set will not
         // grow unless it is currently smaller by 1/2 of the target size.
         void MergeTempList()
         {
@@ -386,46 +579,32 @@ namespace StreamLib.Cardinality
             }
         }
 
-        // todo rewrite, simplify, remove unnecassary mem copy
         internal static uint[] SortEncodedSet(uint[] encodedSet, int validIndex)
         {
             var sortedList = new List<uint>(validIndex);
-            for (int i = 0; i < validIndex; i++)
-            {
-                uint k = encodedSet[i];
-                sortedList.Add(k);
-            }
+            for (int i = 0; i < validIndex; ++i)
+                sortedList.Add(encodedSet[i]);
 
             sortedList.Sort((left, right) =>
             {
                 if (left == right)
-                {
                     return 0;
-                }
+
                 uint leftIndex = GetSparseIndex(left);
                 uint rightIndex = GetSparseIndex(right);
                 if (leftIndex < rightIndex)
-                {
                     return -1;
-                }
-                else if (rightIndex < leftIndex)
-                {
+                if (rightIndex < leftIndex)
                     return 1;
-                }
                 if (left < right)
-                {
                     return -1;
-                }
-                else if (right < left)
-                {
+                if (right < left)
                     return 1;
-                }
                 return 0;
             });
-            return ToIntArray(sortedList);
+            return sortedList.ToArray();
         }
 
-        // todo inline?
         // get the idx' from an encoding.
         static uint GetSparseIndex(uint k)
         {
@@ -434,17 +613,8 @@ namespace StreamLib.Cardinality
             return k >> 1;
         }
 
-        static uint[] ToIntArray(List<uint> list)
-        {
-            uint[] ret = new uint[list.Count];
-            for (int i = 0; i < ret.Length; i++)
-            {
-                ret[i] = list[i];
-            }
-            return ret;
-        }
-
-        /// <summary>Batch merges the sparse set with the temporary list. Usually called when the temporary
+        /// <summary>
+        /// Batch merges the sparse set with the temporary list. Usually called when the temporary
         /// list fills up, but may also be needed when suddenly converting to normal or producing a
         /// cardinality estimate.
         ///
@@ -457,7 +627,8 @@ namespace StreamLib.Cardinality
         /// length. However, most of the time the run length will be the same if two idx' are the same. Only in the
         /// 1 in ~128 chance case of 'all 0s?' will they differ. Because the rest of the encoding is the same we can
         /// do comparisons without extracting the run length and because of our earlier inversion trick, the highest
-        /// run length duplicates will appear first. So we take those and ignore any that follow with the same idx'.</summary>
+        /// run length duplicates will appear first. So we take those and ignore any that follow with the same idx'.
+        /// </summary>
         /// <param name="set">sparse set</param>
         /// <param name="tmp">list to be merged</param>
         /// <returns>the new sparse set</returns>
@@ -507,7 +678,7 @@ namespace StreamLib.Cardinality
                     }
                 }
             }
-            return ToIntArray(newSet);
+            return newSet.ToArray();
         }
 
         /// <summary>Eats up the inferior duplicates from the temp list</summary>
@@ -528,7 +699,7 @@ namespace StreamLib.Cardinality
             return tmpi;
         }
 
-        // Converts the mode of this estimator from 'sparse' to 'normal'.
+        // Converts the mode of this estimator from Sparse to Normal.
         // Each member of the set has its longer 'sparse precision (sp)' length idx
         // truncated to length p and the associated run length is placed into a register.
         // Collisions are resolved by merely taking the max.
@@ -565,7 +736,7 @@ namespace StreamLib.Cardinality
                 // smoosh the flag bit; it has served its purpose
                 // then & with 63 to delete everything but the run length
                 // then invert again to undo the inversion from before
-                return ((k >> 1) & 63) ^ 63; // todo >>>
+                return ((k >> 1) & 63) ^ 63;
             }
             // in one of the encode diagrams there is a substring of bits
             // labeled 'has 1'. This is where we find that one!
@@ -577,127 +748,12 @@ namespace StreamLib.Cardinality
             return UInt32.NumberOfLeadingZeros(k << (int)(_p + (31 - _sp))) + 1;
         }
 
-        public override bool Equals(object other)
-        {
-            var otherHll = other as HyperLogLogPlus;
-            return otherHll != null && Equals(otherHll);
-        }
-
-        public bool Equals(HyperLogLogPlus other)
-        {
-            if (other == null)
-                return false;
-
-            if (_format == Format.Sparse)
-                MergeTempList();
-
-            if (other._format == Format.Sparse)
-                other.MergeTempList();
-
-            if (other._format != _format)
-                return false;
-
-            return _format == Format.Normal
-                ? _registerSet.M.SequenceEqual(other._registerSet.M)
-                : _sparseSet.SequenceEqual(other._sparseSet);
-        }
-
-        public override int GetHashCode()
-        {
-            if (_format == Format.Sparse)
-                MergeTempList();
-            if (_format == Format.Normal)
-                return HashCode.ForArray(_registerSet.M);
-            return HashCode.ForArray(_sparseSet);
-        }
-
-        // todo override to string?
-        // todo sort methods
-
         /// <summary>
-        /// Merge this HLL++ with a bunch of others.
-        /// Most of the logic consists of case analysis about the state of this HLL++ and each one it wants to merge
-        /// with. If either of them is 'normal' mode then the other converts to 'normal' as well. A touching sacrifice.
-        /// 'Normal's combine just like regular HLL estimators do.
-        /// If they happen to be both sparse, then it checks if their combined size would be too large and if so, they get
-        /// relegated to normal mode anyway. Otherwise, the mergeEstimators function is called, and a new sparse HLL++ is born.
-        /// </summary>
-        /// <param name="estimators">the estimators to merge with this one</param>
-        /// <returns>a new estimator with their combined knowledge</returns>
-        public HyperLogLogPlus Merge(params HyperLogLogPlus[] estimators)
-        {
-            var merged = new HyperLogLogPlus(_p, _sp);
-            merged.AddAll(this);
-
-            if (estimators == null)
-                return merged;
-
-            foreach (var hll in estimators)
-                merged.AddAll(hll);
-
-            return merged;
-        }
-
-        /// <summary>
-        /// Add all the elements of the other set to this set.
-        /// If possible, the sparse mode is protected. A switch to the normal mode
-        /// is triggered only if the resulting set exceed the threshold.
-        /// This operation does not imply a loss of precision.
-        /// </summary>
-        /// <param name="other">other A compatible Hyperloglog++ instance (same p and sp)</param>
-        public void AddAll(HyperLogLogPlus other)
-        {
-            if (other.SizeOf() != SizeOf())
-                throw new Exception("Cannot merge estimators of different sizes");
-            if (_format == Format.Sparse)
-                MergeTempList();
-            if (other._format == Format.Sparse)
-                other.MergeTempList();
-
-            if ((_format == Format.Normal) && (other._format == Format.Normal))
-            {
-                _registerSet.Merge(other._registerSet);
-                return;
-            }
-
-            if ((_format == Format.Sparse) && (other._format == Format.Sparse))
-            {
-                _sparseSet = MergeEstimators(other);
-                if (_sparseSet.Length > _sparseSetThreshold)
-                    ConvertToNormal();
-                return;
-            }
-
-            if ((_format == Format.Sparse) && (other._format == Format.Normal))
-            {
-                ConvertToNormal();
-                _registerSet.Merge(other._registerSet);
-                return;
-            }
-
-            if ((_format == Format.Normal) && (other._format == Format.Sparse))
-            {
-                // Iterating over other's sparse set and updating only required indexes
-                // of this' register set is several orders of magnitude faster than copying
-                // and converting other to normal mode. This use case is quite common since
-                // we tend to aggregate small sets to large sets.
-                for (var i = 0; i < other._sparseSet.Length; i++)
-                {
-                    uint k = other._sparseSet[i];
-                    uint idx = other.GetIndex(k, _p);
-                    uint r = other.DecodeRunLength(k);
-                    _registerSet.UpdateIfGreater(idx, r);
-                }
-                return;
-            }
-
-            throw new Exception("Unhandled HLL++ merge combination");
-        }
-
-        /// <summary>Merge this HLL++ instance with another! The power of friends! This works
+        /// Merge this HLL++ instance with another! The power of friends! This works
         /// very similarly to the merge with temp list function. However, in this
         /// case, both lists will need their own delta decoding and neither will have
-        /// to worry about consuming duplicates.</summary>
+        /// to worry about consuming duplicates.
+        /// </summary>
         /// <returns>the new sparse set</returns>
         uint[] MergeEstimators(HyperLogLogPlus other)
         {
@@ -739,7 +795,7 @@ namespace StreamLib.Cardinality
                     }
                 }
             }
-            return ToIntArray(newSet);
+            return newSet.ToArray();
         }
 
         uint SizeOf()
@@ -747,88 +803,6 @@ namespace StreamLib.Cardinality
             if (_registerSet == null)
                 return 4 * RegisterSet.GetSizeForCount(_m);
             return (uint)_registerSet.M.Length * 4;
-        }
-
-        public byte[] GetBytes()
-        {
-            using (var ms = new MemoryStream())
-            using (var bw = new BinaryWriter(ms))
-            {
-                // write version flag (always negative)
-                bw.Write(-Version);
-                Varint.WriteUInt32(_p, ms);
-                Varint.WriteUInt32(_sp, ms);
-                if (_format == Format.Sparse)
-                    MergeTempList();
-
-                switch (_format)
-                {
-                    case Format.Normal:
-                        Varint.WriteUInt32(0, ms);
-                        Varint.WriteUInt32((uint)_registerSet.M.Length * 4, ms);
-                        foreach (var x in _registerSet.M)
-                            bw.Write(x);
-                        break;
-                    case Format.Sparse:
-                        Varint.WriteUInt32(1, ms);
-                        Varint.WriteUInt32((uint)_sparseSet.Length, ms);
-                        uint prevMergedDelta = 0;
-                        foreach (var k in _sparseSet)
-                        {
-                            Varint.WriteUInt32((uint)(k - prevMergedDelta), ms);
-                            prevMergedDelta = k;
-                        }
-                        break;
-                }
-                return ms.ToArray();
-            }
-        }
-
-        public static class Builder
-        {
-            public static HyperLogLogPlus Build(byte[] bytes)
-            {
-                using (var ms = new MemoryStream(bytes))
-                {
-                    ms.Seek(4, SeekOrigin.Begin); // skip version, we support only single version for now (ver2 of stream-lib)
-                    return DecodeBytes(ms);
-                }
-            }
-
-            static HyperLogLogPlus DecodeBytes(Stream stream)
-            {
-                uint p = Varint.ReadUInt32(stream);
-                uint sp = Varint.ReadUInt32(stream);
-                var format = (Format)Varint.ReadUInt32(stream);
-                if (format == Format.Sparse)
-                {
-                    uint size = Varint.ReadUInt32(stream);
-                    byte[] longArrayBytes = new byte[size];
-                    stream.Read(longArrayBytes, 0, (int)size);
-                    var registerSet = new RegisterSet((uint)Math.Pow(2, p), Bits.GetBits(longArrayBytes));
-                    var hll = new HyperLogLogPlus(p, sp, registerSet)
-                        {
-                            _format = Format.Normal
-                        };
-                    return hll;
-                }
-                else
-                {
-                    uint[] rehydratedSparseSet = new uint[Varint.ReadUInt32(stream)];
-                    uint prevDeltaRead = 0;
-                    for (int i = 0; i < rehydratedSparseSet.Length; i++)
-                    {
-                        uint nextVal = Varint.ReadUInt32(stream) + prevDeltaRead;
-                        rehydratedSparseSet[i] = nextVal;
-                        prevDeltaRead = nextVal;
-                    }
-                    var hll = new HyperLogLogPlus(p, sp, rehydratedSparseSet)
-                        {
-                            _format = Format.Sparse
-                        };
-                    return hll;
-                }
-            }
         }
     }
 }

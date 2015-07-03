@@ -144,7 +144,7 @@ namespace StreamLib.Tests.Cardinality
                 hll.OfferHashed(Hash64(i));
             Console.WriteLine(hll.Cardinality());
 
-            var hll2 = HyperLogLogPlus.Builder.Build(hll.GetBytes());
+            var hll2 = HyperLogLogPlus.FromBytes(hll.ToBytes());
             Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
         }
 
@@ -158,7 +158,7 @@ namespace StreamLib.Tests.Cardinality
             hll.OfferHashed(Hash64("d"));
             hll.OfferHashed(Hash64("e"));
 
-            var hll2 = HyperLogLogPlus.Builder.Build(hll.GetBytes());
+            var hll2 = HyperLogLogPlus.FromBytes(hll.ToBytes());
             Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
         }
 
@@ -191,7 +191,7 @@ namespace StreamLib.Tests.Cardinality
 
                     Console.WriteLine("hllcardinality={0} cardinality={1}", hll.Cardinality(), cardinality);
 
-                    var deserialized = HyperLogLogPlus.Builder.Build(hll.GetBytes());
+                    var deserialized = HyperLogLogPlus.FromBytes(hll.ToBytes());
                     Assert.That(deserialized.Cardinality(), Is.EqualTo(hll.Cardinality()));
                     var merged = hll.Merge(deserialized);
                     Console.WriteLine(merged.Cardinality() + " : " + hll.Cardinality());
@@ -219,7 +219,7 @@ namespace StreamLib.Tests.Cardinality
                         for (int l = 0; l < cardinality; l++)
                             hll.OfferHashed(Hash64(Rnd.Next()));
 
-                        var deserialized = HyperLogLogPlus.Builder.Build(hll.GetBytes());
+                        var deserialized = HyperLogLogPlus.FromBytes(hll.ToBytes());
                         Console.WriteLine(ps[j] + "-" + sp + ": " + cardinality + " -> " + hll.Cardinality());
                         Assert.That(deserialized.Cardinality(), Is.EqualTo(hll.Cardinality()));
                         var merged = hll.Merge(deserialized);
@@ -243,7 +243,7 @@ namespace StreamLib.Tests.Cardinality
             var hllp = new HyperLogLogPlus(14, 14);
             for (int i = 0; i < 10000; ++i)
                 hllp.OfferHashed(Hash64(i));
-            Console.WriteLine("Size: {0}", hllp.GetBytes().Length);
+            Console.WriteLine("Size: {0}", hllp.ToBytes().Length);
         }
 
         [Test]
