@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.31101.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StreamLib", "StreamLib\StreamLib.csproj", "{0004B9AA-E36F-4E78-BBA8-5E369B11BAE4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StreamLib.Tests", "StreamLib.Tests\StreamLib.Tests.csproj", "{E470F2E4-7843-4441-A120-273B9FFE2F15}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0004B9AA-E36F-4E78-BBA8-5E369B11BAE4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0004B9AA-E36F-4E78-BBA8-5E369B11BAE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0004B9AA-E36F-4E78-BBA8-5E369B11BAE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0004B9AA-E36F-4E78-BBA8-5E369B11BAE4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E470F2E4-7843-4441-A120-273B9FFE2F15}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E470F2E4-7843-4441-A120-273B9FFE2F15}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E470F2E4-7843-4441-A120-273B9FFE2F15}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E470F2E4-7843-4441-A120-273B9FFE2F15}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
