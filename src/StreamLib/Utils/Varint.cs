@@ -15,19 +15,17 @@ namespace StreamLib.Utils
             for (; offset < 32; offset += 7)
             {
                 int b = input.ReadByte();
-                if (b == -1)
-                    throw Truncated;
+                if (b == -1) throw Truncated;
 
                 result |= (b & 0x7f) << offset;
                 if ((b & 0x80) == 0)
                     return (uint)result;
             }
-            // Keep reading up to 64 bits
+            // keep reading up to 64 bits
             for (; offset < 64; offset += 7)
             {
                 int b = input.ReadByte();
-                if (b == -1)
-                    throw Truncated;
+                if (b == -1) throw Truncated;
                 if ((b & 0x80) == 0)
                     return (uint)result;
             }

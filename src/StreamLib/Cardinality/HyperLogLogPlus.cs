@@ -105,22 +105,24 @@ namespace StreamLib.Cardinality
         readonly uint _p;
 
         // sparse versions of m and p
-        readonly int _sm;
+        readonly uint _sm;
         readonly uint _sp;
 
         readonly double _alphamm;
 
         // how big the sparse set is allowed to get before we convert to 'normal'
-        readonly int _sparseSetThreshold;
+        readonly uint _sparseSetThreshold;
 
         uint[] _tmpSet;
         int _tmpIndex = 0;
 
-        /// <summary>Basic constructor for creating a instance that supports sparse and normal
+        /// <summary>
+        /// Basic constructor for creating a instance that supports sparse and normal
         /// representations. The values of <paramref name="p"/> and
         /// <paramref name="sp"/> define the precision of the Normal and Sparse set
         /// representations for the data structure. <paramref name="p"/> must be a value
-        /// between 4 and <paramref name="sp"/> and <paramref name="sp"/> must be less than 32.</summary>
+        /// between 4 and <paramref name="sp"/> and <paramref name="sp"/> must be less than 32.
+        /// </summary>
         /// <param name="p">the precision value for the normal set</param>
         /// <param name="sp">the precision value for the sparse set</param>
         public HyperLogLogPlus(uint p, uint sp)
@@ -135,7 +137,7 @@ namespace StreamLib.Cardinality
 
         HyperLogLogPlus(uint p, uint sp, uint[] sparseSet, RegisterSet registerSet = null)
         {
-            if ((p < 4) || ((p > sp) && (sp != 0)))
+            if (p < 4 || (p > sp && sp != 0))
                 throw new ArgumentOutOfRangeException("p", "p must be between 4 and sp (inclusive)");
             if (sp > 32)
                 throw new ArgumentOutOfRangeException("sp", "sp values greater than 32 not supported");
@@ -146,17 +148,17 @@ namespace StreamLib.Cardinality
             _registerSet = registerSet;
             if (registerSet == null)
             {
-                if (sp > 0) // Use sparse representation
+                if (sp > 0) // use sparse representation
                 {
                     _format = Format.Sparse;
                     _sp = sp;
-                    _sm = (int)Math.Pow(2, sp);
+                    _sm = (uint)Math.Pow(2, sp);
                     _sparseSet = sparseSet ?? _emptySparse;
-                    _sparseSetThreshold = (int)(_m * 0.75);
+                    _sparseSetThreshold = (uint)(_m * 0.75);
                 }
                 else
                 {
-                    _registerSet = new RegisterSet((int)Math.Pow(2, p));
+                    _registerSet = new RegisterSet(_m);
                 }
             }
             _alphamm = GetAlphamm(p, _m);
@@ -181,15 +183,12 @@ namespace StreamLib.Cardinality
                     // call the sparse encoding scheme which attempts to stuff as much helpful data into 32 bits as possible
                     uint k = EncodeHash(hash, _p, _sp);
                     if (_tmpSet == null)
-                    {
                         _tmpSet = new uint[InitialTempSetCapacity];
-                    }
+
                     // put the encoded data into the temp set
                     _tmpSet[_tmpIndex++] = k;
                     if (_tmpIndex >= _tmpSet.Length)
-                    {
                         MergeTempList();
-                    }
                     return true;
             }
             return false;
@@ -201,56 +200,39 @@ namespace StreamLib.Cardinality
         public long Cardinality()
         {
             if (_format == Format.Sparse)
-            {
                 MergeTempList();
-            }
             switch (_format)
             {
                 case Format.Normal:
                     double registerSum = 0;
-                    int count = _registerSet.Count;
+                    uint count = _registerSet.Count;
                     double zeros = 0;
-                    for (uint j = 0; j < _registerSet.Count; j++)
+                    for (uint j = 0; j < _registerSet.Count; ++j)
                     {
                         int val = (int)_registerSet.Get(j);
                         registerSum += 1.0 / (1 << val);
                         if (val == 0)
-                        {
                             zeros++;
-                        }
                     }
 
                     double estimate = _alphamm * (1 / registerSum);
                     double estimatePrime = estimate;
-                    if (estimate <= (5 * _m))
-                    {
+                    if (estimate <= 5 * _m)
                         estimatePrime = estimate - GetEstimateBias(estimate, _p);
-                    }
-                    double H;
-                    if (zeros > 0)
-                    {
-                        H = LinearCounting(count, zeros);
-                    }
-                    else
-                    {
-                        H = estimatePrime;
-                    }
+
+                    var H = zeros > 0 ? LinearCounting(count, zeros) : estimatePrime;
+
                     // when p is large the threshold is just 5*m
                     if (((_p <= 18) && (H < ThresholdData[_p - 4])) || ((_p > 18) && (estimate <= (5 * _m))))
-                    {
                         return (long)Math.Round(H);
-                    }
-                    else
-                    {
-                        return (long)Math.Round(estimatePrime);
-                    }
+                    return (long)Math.Round(estimatePrime);
                 case Format.Sparse:
                     return (long)Math.Round(LinearCounting(_sm, _sm - _sparseSet.Length));
             }
             return 0;
         }
 
-        static double LinearCounting(int m, double V)
+        static double LinearCounting(uint m, double V)
         {
             return m * Math.Log(m / V);
         }
@@ -260,9 +242,8 @@ namespace StreamLib.Cardinality
             // get nearest neighbors for this estimate and precision
             // above p = 18 there is no bias correction
             if (p > 18)
-            {
                 return 0;
-            }
+
             double[] estimateVector = RawEstimateData[p - 4];
             SortedDictionary<double, int> estimateDistances = CalcDistances(estimate, estimateVector);
             int[] nearestNeighbors = GetNearestNeighbors(estimateDistances);
@@ -292,9 +273,7 @@ namespace StreamLib.Cardinality
             {
                 nearest[i++] = index;
                 if (i >= 6)
-                {
                     break;
-                }
             }
             return nearest;
         }
@@ -304,15 +283,13 @@ namespace StreamLib.Cardinality
             double[] biasVector = BiasData[p - 4];
             double biasTotal = 0.0d;
             foreach (int nearestNeighbor in nearestNeighbors)
-            {
                 biasTotal += biasVector[nearestNeighbor];
-            }
             return biasTotal / nearestNeighbors.Length;
         }
 
         static double GetAlphamm(uint p, uint m)
         {
-            // See the paper.
+            // see the paper
             switch (p)
             {
                 case 4:
@@ -367,14 +344,10 @@ namespace StreamLib.Cardinality
         static uint EncodeHash(ulong x, uint p, uint sp)
         {
             // get the idx' (the first sp bits) by pushing the rest to the right (into oblivion >:D)
-            uint idx = (uint)(x >> (int)(64 - sp)); // todo was >>>
+            uint idx = (uint)(x >> (int)(64 - sp));
             // push to the left for all the spaces you know are between the start of your bits and the left 'wall'
             // then push p bits off as well so we have just our friend "all 0s?"
-            uint zeroTest = 0;
-            if (p < sp)
-            {
-                zeroTest = idx << (int)((32 - sp) + p);
-            }
+            uint zeroTest = p < sp ? idx << (int)((32 - sp) + p) : 0;
             if (zeroTest == 0)
             {
                 // see offer
@@ -407,13 +380,9 @@ namespace StreamLib.Cardinality
                 _sparseSet = Merge(_sparseSet, sortedSet);
                 _tmpIndex = 0;
                 if (_sparseSet.Length > _sparseSetThreshold)
-                {
                     ConvertToNormal();
-                }
                 else if ((_tmpSet.Length * 2) < (_sparseSet.Length / SparseSetTempSetRatio))
-                {
                     _tmpSet = new uint[_sparseSet.Length / SparseSetTempSetRatio];
-                }
             }
         }
 
@@ -461,8 +430,8 @@ namespace StreamLib.Cardinality
         static uint GetSparseIndex(uint k)
         {
             if ((k & 1) == 1)
-                return k >> 7; // todo was >>>
-            return k >> 1; // todo was >>>
+                return k >> 7;
+            return k >> 1;
         }
 
         static uint[] ToIntArray(List<uint> list)
@@ -553,9 +522,7 @@ namespace StreamLib.Cardinality
                 uint nextTmp = tmp[tmpi];
                 uint nextTmpIdx = GetSparseIndex(nextTmp);
                 if (tmpIdx != nextTmpIdx)
-                {
                     return tmpi;
-                }
                 tmpi++;
             }
             return tmpi;
@@ -567,7 +534,7 @@ namespace StreamLib.Cardinality
         // Collisions are resolved by merely taking the max.
         void ConvertToNormal()
         {
-            _registerSet = new RegisterSet((int)Math.Pow(2, _p));
+            _registerSet = new RegisterSet(_m);
             foreach (uint k in _sparseSet)
             {
                 uint idx = GetIndex(k, _p);
@@ -585,7 +552,7 @@ namespace StreamLib.Cardinality
         uint GetIndex(uint k, uint p)
         {
             uint sparseIndex = GetSparseIndex(k);
-            return sparseIndex >> (int)(_sp - p); // todo was >>>
+            return sparseIndex >> (int)(_sp - p);
         }
 
         /// <summary>More of less the opposite of the encoding function but just for getting out run lengths.</summary>
@@ -595,22 +562,19 @@ namespace StreamLib.Cardinality
         {
             if ((k & 1) == 1) //checking the flag bit
             {
-                // Smoosh the flag bit; it has served its purpose
-                // Then & with 63 to delete everything but the run length
-                // Then invert again to undo the inversion from before
+                // smoosh the flag bit; it has served its purpose
+                // then & with 63 to delete everything but the run length
+                // then invert again to undo the inversion from before
                 return ((k >> 1) & 63) ^ 63; // todo >>>
             }
-            else
-            {
-                //In one of the encode diagrams there is a substring of bits
-                //labeled 'has 1'. This is where we find that one!
+            // in one of the encode diagrams there is a substring of bits
+            // labeled 'has 1'. This is where we find that one!
 
-                //First push left to clear out the empty space (that is 31-sp places)
-                //Then push left some more cause bits in precision p don't count for run length
-                //That is, push left p times.
-                //Lastly we add one because we love adding one to run lengths. Its our JAM
-                return UInt32.NumberOfLeadingZeros(k << (int)(_p + (31 - _sp))) + 1;
-            }
+            // first push left to clear out the empty space (that is 31-sp places)
+            // then push left some more cause bits in precision p don't count for run length
+            // that is, push left p times.
+            // lastly we add one because we love adding one to run lengths. Its our JAM
+            return UInt32.NumberOfLeadingZeros(k << (int)(_p + (31 - _sp))) + 1;
         }
 
         public override bool Equals(object other)
@@ -650,12 +614,14 @@ namespace StreamLib.Cardinality
         // todo override to string?
         // todo sort methods
 
-        /// <summary>Merge this HLL++ with a bunch of others.
+        /// <summary>
+        /// Merge this HLL++ with a bunch of others.
         /// Most of the logic consists of case analysis about the state of this HLL++ and each one it wants to merge
         /// with. If either of them is 'normal' mode then the other converts to 'normal' as well. A touching sacrifice.
         /// 'Normal's combine just like regular HLL estimators do.
         /// If they happen to be both sparse, then it checks if their combined size would be too large and if so, they get
-        /// relegated to normal mode anyway. Otherwise, the mergeEstimators function is called, and a new sparse HLL++ is born.</summary>
+        /// relegated to normal mode anyway. Otherwise, the mergeEstimators function is called, and a new sparse HLL++ is born.
+        /// </summary>
         /// <param name="estimators">the estimators to merge with this one</param>
         /// <returns>a new estimator with their combined knowledge</returns>
         public HyperLogLogPlus Merge(params HyperLogLogPlus[] estimators)
@@ -668,13 +634,16 @@ namespace StreamLib.Cardinality
 
             foreach (var hll in estimators)
                 merged.AddAll(hll);
+
             return merged;
         }
 
-        /// <summary>Add all the elements of the other set to this set.
+        /// <summary>
+        /// Add all the elements of the other set to this set.
         /// If possible, the sparse mode is protected. A switch to the normal mode
         /// is triggered only if the resulting set exceed the threshold.
-        /// This operation does not imply a loss of precision.</summary>
+        /// This operation does not imply a loss of precision.
+        /// </summary>
         /// <param name="other">other A compatible Hyperloglog++ instance (same p and sp)</param>
         public void AddAll(HyperLogLogPlus other)
         {
@@ -695,9 +664,7 @@ namespace StreamLib.Cardinality
             {
                 _sparseSet = MergeEstimators(other);
                 if (_sparseSet.Length > _sparseSetThreshold)
-                {
                     ConvertToNormal();
-                }
                 return;
             }
 
@@ -746,13 +713,9 @@ namespace StreamLib.Cardinality
             while ((seti < set.Length) || (tmpi < tmp.Length))
             {
                 if (seti >= set.Length)
-                {
                     newSet.Add(tmp[tmpi++]);
-                }
                 else if (tmpi >= tmp.Length)
-                {
                     newSet.Add(set[seti++]);
-                }
                 else
                 {
                     uint setVal = set[seti];
@@ -779,11 +742,11 @@ namespace StreamLib.Cardinality
             return ToIntArray(newSet);
         }
 
-        int SizeOf()
+        uint SizeOf()
         {
             if (_registerSet == null)
-                return 4 * RegisterSet.GetSizeForCount((int) Math.Pow(2, _p)); // todo _m?
-            return _registerSet.M.Length * 4;
+                return 4 * RegisterSet.GetSizeForCount(_m);
+            return (uint)_registerSet.M.Length * 4;
         }
 
         public byte[] GetBytes()
@@ -842,11 +805,11 @@ namespace StreamLib.Cardinality
                     uint size = Varint.ReadUInt32(stream);
                     byte[] longArrayBytes = new byte[size];
                     stream.Read(longArrayBytes, 0, (int)size);
-                    var registerSet = new RegisterSet((int) Math.Pow(2, p), Bits.GetBits(longArrayBytes));
+                    var registerSet = new RegisterSet((uint)Math.Pow(2, p), Bits.GetBits(longArrayBytes));
                     var hll = new HyperLogLogPlus(p, sp, registerSet)
-                    {
-                        _format = Format.Normal
-                    };
+                        {
+                            _format = Format.Normal
+                        };
                     return hll;
                 }
                 else
@@ -860,9 +823,9 @@ namespace StreamLib.Cardinality
                         prevDeltaRead = nextVal;
                     }
                     var hll = new HyperLogLogPlus(p, sp, rehydratedSparseSet)
-                    {
-                        _format = Format.Sparse
-                    };
+                        {
+                            _format = Format.Sparse
+                        };
                     return hll;
                 }
             }

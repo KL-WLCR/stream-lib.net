@@ -7,9 +7,9 @@ namespace StreamLib.Tests.Cardinality
     [TestFixture]
     public class RegisterSetTests
     {
-        static int Pow(int num, int power)
+        static uint Pow(int num, int power)
         {
-            return (int)Math.Pow(num, power);
+            return (uint)Math.Pow(num, power);
         }
 
         [Test]
