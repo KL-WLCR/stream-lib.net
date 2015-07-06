@@ -36,7 +36,6 @@ namespace StreamLib.Tests.Cardinality
         }
 
         [Test]
-        [Ignore("https://github.com/addthis/stream-lib/issues/91")]
         public void Offer()
         {
             var hll = new HyperLogLogPlus(5,25);
@@ -121,8 +120,8 @@ namespace StreamLib.Tests.Cardinality
             var sw = Stopwatch.StartNew();
 
             var hll = new HyperLogLogPlus(18, 25);
-            const int size = 10000000;
-            for (int i = 0; i < size; i++)
+            const int size = (int)10e6;
+            for (int i = 0; i < size; ++i)
             {
                 var buf = new byte[8];
                 Rnd.NextBytes(buf);
