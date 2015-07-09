@@ -172,7 +172,7 @@ namespace StreamLib.Cardinality
             _alphamm = GetAlphamm(p, _m);
         }
 
-        /// <summary>Offer the value as a ulong hash value</summary>
+        /// <summary>OfferHashed the value as a ulong hash value</summary>
         /// <param name="hash">the hash of the item to offer to the estimator</param>
         /// <returns>false if the value returned by Cardinality() is unaffected by the appearance of hash in the stream</returns>
         public bool OfferHashed(ulong hash)

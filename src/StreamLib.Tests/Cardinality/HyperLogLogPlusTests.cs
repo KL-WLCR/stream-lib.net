@@ -2,39 +2,14 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using Murmur;
 using NUnit.Framework;
 using StreamLib.Cardinality;
 
 namespace StreamLib.Tests.Cardinality
 {
     [TestFixture]
-    public class HyperLogLogPlusTests
+    public class HyperLogLogPlusTests : TestBase
     {
-        static readonly Random Rnd = new Random();
-
-        static ulong Hash64(byte[] value)
-        {
-            var hashalg = MurmurHash.Create128(managed: false);
-            return hashalg.ComputeHash64(value);
-        }
-
-        static ulong Hash64(string value)
-        {
-            return Hash64(Encoding.UTF8.GetBytes(value));
-        }
-
-        static ulong Hash64(int value)
-        {
-            return Hash64(BitConverter.GetBytes(value));
-        }
-
-        static ulong Hash64(double value)
-        {
-            return Hash64(BitConverter.GetBytes(value));
-        }
-
         [Test]
         public void Offer()
         {

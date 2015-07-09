@@ -21,5 +21,22 @@
             n -= i >> 31;
             return n;
         }
+
+        /// <summary>
+        /// Returns the number of one-bits in the two's complement binary
+        /// representation of the specified value.  This function is
+        /// sometimes referred to as the population count.
+        /// </summary>
+        /// <param name="i">the value whose bits are to be counted</param>
+        /// <returns>the number of one-bits in the two's complement binary representation of the specified value</returns>
+        public static uint BitCount(uint i)
+        {
+            i = i - ((i >> 1) & 0x55555555);
+            i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
+            i = (i + (i >> 4)) & 0x0f0f0f0f;
+            i = i + (i >> 8);
+            i = i + (i >> 16);
+            return i & 0x3f;
+        }
     }
 }

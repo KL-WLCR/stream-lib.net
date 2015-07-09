@@ -22,6 +22,17 @@ namespace StreamLib.Tests.Utils
         }
 
         [Test]
+        public void UInt32_BitCount()
+        {
+            Prop.ForAll<uint>(num =>
+            {
+                var actual = UInt32.BitCount(num);
+                var expected = Convert.ToString(num, 2).PadLeft(32, '0').Count(c => c == '1');
+                return actual == expected;
+            }).QuickCheckThrowOnFailure();
+        }
+
+        [Test]
         public void UInt64_NumberOfLeadingZeros()
         {
             Prop.ForAll<ulong>(num =>

@@ -36,6 +36,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Cardinality\HyperLogLogPlus.cs" />
+    <Compile Include="Cardinality\LinearCounter.cs" />
     <Compile Include="Utils\Bits.cs" />
     <Compile Include="Utils\Extensions.cs" />
     <Compile Include="Utils\HashCode.cs" />

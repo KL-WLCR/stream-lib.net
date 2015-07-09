@@ -51,7 +51,9 @@
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Cardinality\LinearCountingTests.cs" />
     <Compile Include="Cardinality\RegisterSetTests.cs" />
+    <Compile Include="Cardinality\TestBase.cs" />
     <Compile Include="Utils\UIntTests.cs" />
     <Compile Include="Cardinality\HyperLogLogPlusTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

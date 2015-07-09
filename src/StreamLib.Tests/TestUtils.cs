@@ -5,6 +5,12 @@ namespace StreamLib.Tests
 {
     public static class Murmur128Extensions
     {
+        public static uint ComputeHash32(this Murmur32 murmur, byte[] data)
+        {
+            var hash32 = murmur.ComputeHash(data);
+            return BitConverter.ToUInt32(hash32, 0);
+        }
+
         public static ulong ComputeHash64(this Murmur128 murmur, byte[] data)
         {
             var hash128 = murmur.ComputeHash(data);
