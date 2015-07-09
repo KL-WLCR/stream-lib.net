@@ -100,8 +100,6 @@ namespace StreamLib.Cardinality
 
         RegisterSet _registerSet;
         uint[] _sparseSet;
-        int _sparseSetSize;
-        HashSet<uint> _transientSparseSet;
 
         readonly uint _m;
         readonly uint _p;
@@ -155,15 +153,7 @@ namespace StreamLib.Cardinality
                     _format = Format.Sparse;
                     _sp = sp;
                     _sm = (uint)Math.Pow(2, sp);
-                    //_sparseSet = sparseSet ?? EmptySparse;
-                    if (sparseSet == null)
-                        _sparseSet = EmptySparse;
-                    else
-                    {
-                        _sparseSet = sparseSet;
-                        _transientSparseSet = new HashSet<uint>(sparseSet);
-                        _sparseSetSize = _transientSparseSet.Count;
-                    }
+                    _sparseSet = sparseSet ?? EmptySparse;
                     _sparseSetThreshold = (uint)(_m * 0.75);
                 }
                 else
@@ -195,17 +185,11 @@ namespace StreamLib.Cardinality
 
                     // put the encoded data into the temp set
                     _tmpSet[_tmpIndex++] = k;
-                    if (_transientSparseSet == null)
-                        _transientSparseSet = new HashSet<uint>();
-                    _transientSparseSet.Add(k);
-                    int oldSize = _sparseSetSize;
-                    _sparseSetSize = _transientSparseSet.Count;
-                    bool modified = _sparseSetSize > oldSize;
-
                     if (_tmpIndex >= _tmpSet.Length)
                         MergeTempList();
-                    return modified;
+                    return true;
             }
+
             return false;
         }
 
