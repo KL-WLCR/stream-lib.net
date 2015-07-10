@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using StreamLib.Utils;
 using UInt32 = StreamLib.Utils.UInt32;
 using UInt64 = StreamLib.Utils.UInt64;
@@ -15,9 +16,6 @@ namespace StreamLib.Cardinality
             Sparse = 0,
             Normal = 1
         }
-
-        // used to mark codec version for serialization
-        const int Version = 2;
 
         const int InitialTempSetCapacity = 4;
 
@@ -262,8 +260,6 @@ namespace StreamLib.Cardinality
             using (var ms = new MemoryStream())
             using (var bw = new BinaryWriter(ms))
             {
-                // write version flag (always negative)
-                bw.Write(-Version);
                 Varint.WriteUInt32(_p, ms);
                 Varint.WriteUInt32(_sp, ms);
                 if (_format == Format.Sparse)
@@ -296,7 +292,6 @@ namespace StreamLib.Cardinality
         {
             using (var ms = new MemoryStream(bytes))
             {
-                ms.Seek(4, SeekOrigin.Begin); // skip version, we support only single version for now (ver2 of stream-lib)
                 uint p = Varint.ReadUInt32(ms);
                 uint sp = Varint.ReadUInt32(ms);
                 var format = (Format)Varint.ReadUInt32(ms);
@@ -427,6 +422,7 @@ namespace StreamLib.Cardinality
             throw new Exception("Unhandled HLL++ merge combination"); // todo add format, p, sp to msg
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static double LinearCounting(uint m, double V)
         {
             return m * Math.Log(m / V);
@@ -606,7 +602,8 @@ namespace StreamLib.Cardinality
             return sortedList.ToArray();
         }
 
-        // get the idx' from an encoding.
+        // get the idx' from an encoding
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static uint GetSparseIndex(uint k)
         {
             if ((k & 1) == 1)
@@ -659,14 +656,16 @@ namespace StreamLib.Cardinality
                     uint setVal = set[seti];
                     uint tmpVal = tmp[tmpi];
 
-                    if (GetSparseIndex(setVal) == GetSparseIndex(tmpVal))
+                    var sparseIndexSetVal = GetSparseIndex(setVal);
+                    var sparseIndexTmpVal = GetSparseIndex(tmpVal);
+                    if (sparseIndexSetVal == sparseIndexTmpVal)
                     {
                         newSet.Add(Math.Min(setVal, tmpVal));
                         tmpi++;
-                        tmpi = ConsumeDuplicates(tmp, GetSparseIndex(tmpVal), tmpi);
+                        tmpi = ConsumeDuplicates(tmp, sparseIndexTmpVal, tmpi);
                         seti++;
                     }
-                    else if (GetSparseIndex(setVal) < GetSparseIndex(tmpVal))
+                    else if (sparseIndexSetVal < sparseIndexTmpVal)
                     {
                         newSet.Add(setVal);
                         seti++;
@@ -675,7 +674,7 @@ namespace StreamLib.Cardinality
                     {
                         newSet.Add(tmpVal);
                         tmpi++;
-                        tmpi = ConsumeDuplicates(tmp, GetSparseIndex(tmpVal), tmpi);
+                        tmpi = ConsumeDuplicates(tmp, sparseIndexTmpVal, tmpi);
                     }
                 }
             }
@@ -778,13 +777,15 @@ namespace StreamLib.Cardinality
                     uint setVal = set[seti];
                     uint tmpVal = tmp[tmpi];
 
-                    if (GetSparseIndex(setVal) == GetSparseIndex(tmpVal))
+                    var sparseIndexSetVal = GetSparseIndex(setVal);
+                    var sparseIndexTmpVal = GetSparseIndex(tmpVal);
+                    if (sparseIndexSetVal == sparseIndexTmpVal)
                     {
                         newSet.Add(Math.Min(setVal, tmpVal));
                         tmpi++;
                         seti++;
                     }
-                    else if (GetSparseIndex(setVal) < GetSparseIndex(tmpVal))
+                    else if (sparseIndexSetVal < sparseIndexTmpVal)
                     {
                         newSet.Add(setVal);
                         seti++;
