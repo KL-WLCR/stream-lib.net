@@ -1,7 +1,8 @@
-﻿using System.IO;
-using FsCheck;
+﻿using FsCheck;
 using NUnit.Framework;
 using StreamLib.Utils;
+using StreamLib.Utils.Streams;
+using StreamLib.Utils.Streams.System.IO;
 
 namespace StreamLib.Tests.Utils
 {
@@ -13,12 +14,16 @@ namespace StreamLib.Tests.Utils
         {
             Prop.ForAll<uint>(num =>
             {
-                using (var ms = new MemoryStream())
+                using (var wms = new WriteOnlyMemoryStream())
                 {
-                    Varint.WriteUInt32(num, ms);
-                    ms.Seek(0, SeekOrigin.Begin);
-                    var readed = Varint.ReadUInt32(ms);
-                    return readed == num;
+                    Varint.WriteUInt32(num, wms);
+                    var varintBytes = wms.ToArray();
+
+                    using (var ms = new ReadOnlyMemoryStream(varintBytes))
+                    {
+                        var readed = Varint.ReadUInt32(ms);
+                        return readed == num;
+                    }
                 }
             }).QuickCheckThrowOnFailure();
         }

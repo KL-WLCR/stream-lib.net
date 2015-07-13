@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using StreamLib.Utils;
+using StreamLib.Utils.Streams;
+using StreamLib.Utils.Streams.System.IO;
 using UInt32 = StreamLib.Utils.UInt32;
 using UInt64 = StreamLib.Utils.UInt64;
 
@@ -13,8 +14,8 @@ namespace StreamLib.Cardinality
     {
         enum Format
         {
-            Sparse = 0,
-            Normal = 1
+            Normal = 0,
+            Sparse = 1
         }
 
         const int InitialTempSetCapacity = 4;
@@ -157,7 +158,22 @@ namespace StreamLib.Cardinality
                 else
                     _registerSet = new RegisterSet(_m);
             }
-            _alphamm = GetAlphamm(p, _m);
+
+            switch (p)
+            {
+                case 4:
+                    _alphamm = 0.673 * _m * _m;
+                    break;
+                case 5:
+                    _alphamm = 0.697 * _m * _m;
+                    break;
+                case 6:
+                    _alphamm = 0.709 * _m * _m;
+                    break;
+                default:
+                    _alphamm = (0.7213 / (1 + 1.079 / _m)) * _m * _m;
+                    break;
+            }
         }
 
         /// <summary>OfferHashed the value as a ulong hash value</summary>
@@ -257,49 +273,50 @@ namespace StreamLib.Cardinality
 
         public byte[] ToBytes()
         {
-            using (var ms = new MemoryStream())
-            using (var bw = new BinaryWriter(ms))
+            using (var wms = new WriteOnlyMemoryStream())
             {
-                Varint.WriteUInt32(_p, ms);
-                Varint.WriteUInt32(_sp, ms);
+                Varint.WriteUInt32(_p, wms);
+                Varint.WriteUInt32(_sp, wms);
                 if (_format == Format.Sparse)
                     MergeTempList();
 
                 switch (_format)
                 {
                     case Format.Normal:
-                        Varint.WriteUInt32(0, ms);
-                        Varint.WriteUInt32((uint)_registerSet.M.Length * 4, ms);
+                        var normal = (uint)Format.Normal;
+                        Varint.WriteUInt32(normal, wms);
+                        Varint.WriteUInt32((uint)_registerSet.M.Length * 4, wms);
                         foreach (var x in _registerSet.M)
-                            bw.Write(x);
+                            wms.WriteUInt(x);
                         break;
                     case Format.Sparse:
-                        Varint.WriteUInt32(1, ms);
-                        Varint.WriteUInt32((uint)_sparseSet.Length, ms);
+                        var sparse = (uint)Format.Sparse;
+                        Varint.WriteUInt32(sparse, wms);
+                        Varint.WriteUInt32((uint)_sparseSet.Length, wms);
                         uint prevMergedDelta = 0;
                         foreach (var k in _sparseSet)
                         {
-                            Varint.WriteUInt32((uint)(k - prevMergedDelta), ms);
+                            Varint.WriteUInt32((uint)(k - prevMergedDelta), wms);
                             prevMergedDelta = k;
                         }
                         break;
                 }
-                return ms.ToArray();
+                return wms.ToArray();
             }
         }
 
         public static HyperLogLogPlus FromBytes(byte[] bytes)
         {
-            using (var ms = new MemoryStream(bytes))
+            using (var rms = new ReadOnlyMemoryStream(bytes))
             {
-                uint p = Varint.ReadUInt32(ms);
-                uint sp = Varint.ReadUInt32(ms);
-                var format = (Format)Varint.ReadUInt32(ms);
-                if (format == Format.Sparse)
+                var p = Varint.ReadUInt32(rms);
+                var sp = Varint.ReadUInt32(rms);
+                var format = (Format)Varint.ReadUInt32(rms);
+                if (format == Format.Normal)
                 {
-                    uint size = Varint.ReadUInt32(ms);
+                    var size = Varint.ReadUInt32(rms);
                     byte[] longArrayBytes = new byte[size];
-                    ms.Read(longArrayBytes, 0, (int)size);
+                    rms.Read(longArrayBytes, 0, (int)size);
                     var registerSet = new RegisterSet((uint)Math.Pow(2, p), Bits.GetBits(longArrayBytes));
                     var hll = new HyperLogLogPlus(p, sp, registerSet)
                     {
@@ -309,11 +326,12 @@ namespace StreamLib.Cardinality
                 }
                 else
                 {
-                    uint[] rehydratedSparseSet = new uint[Varint.ReadUInt32(ms)];
+                    var size = Varint.ReadUInt32(rms);
+                    uint[] rehydratedSparseSet = new uint[size];
                     uint prevDeltaRead = 0;
                     for (int i = 0; i < rehydratedSparseSet.Length; ++i)
                     {
-                        uint nextVal = Varint.ReadUInt32(ms) + prevDeltaRead;
+                        uint nextVal = Varint.ReadUInt32(rms) + prevDeltaRead;
                         rehydratedSparseSet[i] = nextVal;
                         prevDeltaRead = nextVal;
                     }
@@ -419,7 +437,7 @@ namespace StreamLib.Cardinality
                 return;
             }
 
-            throw new Exception("Unhandled HLL++ merge combination"); // todo add format, p, sp to msg
+            throw new Exception(string.Format("Unhandled HLL++ merge combination, self.format = {0}, other.format = {1}.", _format, other._format));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -476,21 +494,6 @@ namespace StreamLib.Cardinality
             foreach (int nearestNeighbor in nearestNeighbors)
                 biasTotal += biasVector[nearestNeighbor];
             return biasTotal / nearestNeighbors.Length;
-        }
-
-        static double GetAlphamm(uint p, uint m)
-        {
-            switch (p)
-            {
-                case 4:
-                    return 0.673 * m * m;
-                case 5:
-                    return 0.697 * m * m;
-                case 6:
-                    return 0.709 * m * m;
-                default:
-                    return (0.7213 / (1 + 1.079 / m)) * m * m;
-            }
         }
 
         /// <summary>

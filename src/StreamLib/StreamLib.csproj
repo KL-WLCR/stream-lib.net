@@ -28,6 +28,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -38,13 +39,14 @@
     <Compile Include="Cardinality\HyperLogLogPlus.cs" />
     <Compile Include="Cardinality\LinearCounter.cs" />
     <Compile Include="Utils\Bits.cs" />
-    <Compile Include="Utils\Extensions.cs" />
     <Compile Include="Utils\HashCode.cs" />
+    <Compile Include="Utils\Streams\ReadOnlyMemoryStream.cs" />
     <Compile Include="Utils\UInt64.cs" />
     <Compile Include="Utils\UInt32.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Cardinality\RegisterSet.cs" />
     <Compile Include="Utils\Varint.cs" />
+    <Compile Include="Utils\Streams\WriteOnlyMemoryStream.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

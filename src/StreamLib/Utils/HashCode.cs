@@ -2,6 +2,7 @@ namespace StreamLib.Utils
 {
     internal static class HashCode
     {
+        // todo possible optimization with unsafe implementation
         public static int ForArray(uint[] array)
         {
             unchecked

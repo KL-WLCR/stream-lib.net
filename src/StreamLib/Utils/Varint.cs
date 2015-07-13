@@ -1,5 +1,7 @@
 ﻿using System;
-using System.IO;
+using System.Runtime.CompilerServices;
+using StreamLib.Utils.Streams;
+using StreamLib.Utils.Streams.System.IO;
 
 namespace StreamLib.Utils
 {
@@ -8,7 +10,8 @@ namespace StreamLib.Utils
         static readonly Exception Truncated = new Exception("While parsing bytes the input ended unexpectedly in the middle of a field.");
         static readonly Exception Malformed = new Exception("Stream encountered a malformed varint");
 
-        public static uint ReadUInt32(Stream input)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static uint ReadUInt32(ReadOnlyMemoryStream input)
         {
             int result = 0;
             int offset = 0;
@@ -32,7 +35,8 @@ namespace StreamLib.Utils
             throw Malformed;
         }
 
-        public static void WriteUInt32(uint value, Stream output)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteUInt32(uint value, WriteOnlyMemoryStream output)
         {
             while ((value & 0xFFFFFF80) != 0)
             {

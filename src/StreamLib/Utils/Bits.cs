@@ -1,20 +1,27 @@
-﻿using System.IO;
-
-namespace StreamLib.Utils
+﻿namespace StreamLib.Utils
 {
     public static class Bits
     {
         public static uint[] GetBits(byte[] bytes)
         {
-            int bitSize = bytes.Length / 4;
-            uint[] bits = new uint[bitSize];
-            using (var ms = new MemoryStream(bytes))
-            using (var br = new BinaryReader(ms))
+            var blocks = bytes.Length / 4;
+            var result = new uint[blocks];
+
+            unsafe
             {
-                for (int i = 0; i < bitSize; i++)
-                    bits[i] = br.ReadUInt32();
+                fixed (byte* fix = &bytes[0])
+                {
+                    int curBlock = 0;
+                    uint* curUint = (uint*)fix;
+                    while (curBlock < blocks)
+                    {
+                        result[curBlock] = *curUint;
+                        curUint++;
+                        curBlock++;
+                    }
+                }
             }
-            return bits;
+            return result;
         }
     }
 }
