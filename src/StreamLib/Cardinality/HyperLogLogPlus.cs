@@ -283,20 +283,18 @@ namespace StreamLib.Cardinality
                 switch (_format)
                 {
                     case Format.Normal:
-                        var normal = (uint)Format.Normal;
-                        Varint.WriteUInt32(normal, wms);
+                        Varint.WriteUInt32((uint)Format.Normal, wms);
                         Varint.WriteUInt32((uint)_registerSet.M.Length * 4, wms);
                         foreach (var x in _registerSet.M)
                             wms.WriteUInt(x);
                         break;
                     case Format.Sparse:
-                        var sparse = (uint)Format.Sparse;
-                        Varint.WriteUInt32(sparse, wms);
+                        Varint.WriteUInt32((uint)Format.Sparse, wms);
                         Varint.WriteUInt32((uint)_sparseSet.Length, wms);
                         uint prevMergedDelta = 0;
                         foreach (var k in _sparseSet)
                         {
-                            Varint.WriteUInt32((uint)(k - prevMergedDelta), wms);
+                            Varint.WriteUInt32(k - prevMergedDelta, wms);
                             prevMergedDelta = k;
                         }
                         break;
