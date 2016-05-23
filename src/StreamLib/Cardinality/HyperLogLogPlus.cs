@@ -577,39 +577,38 @@ namespace StreamLib.Cardinality
             }
         }
 
-        internal static uint[] SortEncodedSet(uint[] encodedSet, int validIndex)
+        class Comparer : IComparer<uint>
         {
-            var sortedList = new List<uint>(validIndex);
-            for (int i = 0; i < validIndex; ++i)
-                sortedList.Add(encodedSet[i]);
-
-            sortedList.Sort((left, right) =>
+            public int Compare(uint left, uint right)
             {
-                if (left == right)
-                    return 0;
+                if (left == right) return 0;
 
                 uint leftIndex = GetSparseIndex(left);
                 uint rightIndex = GetSparseIndex(right);
-                if (leftIndex < rightIndex)
-                    return -1;
-                if (rightIndex < leftIndex)
-                    return 1;
-                if (left < right)
-                    return -1;
-                if (right < left)
-                    return 1;
+
+                if (leftIndex < rightIndex) return -1;
+                if (rightIndex < leftIndex) return 1;
+                if (left < right) return -1;
+                if (right < left) return 1;
                 return 0;
-            });
-            return sortedList.ToArray();
+            }
+        }
+
+        static readonly IComparer<uint> comparer = new Comparer();
+
+        internal static uint[] SortEncodedSet(uint[] encodedSet, int validIndex)
+        {
+            var result = new uint[validIndex];
+            Array.Copy(encodedSet, result, validIndex);
+            Array.Sort(result, comparer);
+            return result;
         }
 
         // get the idx' from an encoding
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static uint GetSparseIndex(uint k)
         {
-            if ((k & 1) == 1)
-                return k >> 7;
-            return k >> 1;
+            return (k & 1) == 1 ? k >> 7 : k >> 1;
         }
 
         /// <summary>
@@ -633,10 +632,10 @@ namespace StreamLib.Cardinality
         /// <returns>the new sparse set</returns>
         static uint[] Merge(uint[] set, uint[] tmp)
         {
-            var newSet = new List<uint>();
             // iterate over each set and merge the result values
 
             var setLength = set == null ? 0 : set.Length;
+            var newSet = new List<uint>(setLength + tmp.Length);
             int seti = 0;
             int tmpi = 0;
             while ((seti < setLength) || (tmpi < tmp.Length))
@@ -761,7 +760,7 @@ namespace StreamLib.Cardinality
             uint[] tmp = other._sparseSet;
             uint[] set = _sparseSet;
 
-            var newSet = new List<uint>();
+            var newSet = new List<uint>(tmp.Length + set.Length);
 
             // iterate over each set and merge the result values
 
