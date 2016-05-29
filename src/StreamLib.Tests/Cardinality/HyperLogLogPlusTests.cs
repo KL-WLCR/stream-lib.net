@@ -97,6 +97,7 @@ namespace StreamLib.Tests.Cardinality
 
             var hll = new HyperLogLogPlus(18, 25);
             const int size = (int)10e6;
+
             for (int i = 0; i < size; ++i)
             {
                 var buf = new byte[8];
@@ -140,15 +141,21 @@ namespace StreamLib.Tests.Cardinality
         [Test]
         public void SortEncodedSet()
         {
-            var testSet = new uint[]
-            {
-                655403,
-                655416,
-                655425
-            };
+            //var testSet = new uint[]
+            //{
+            //    655403,
+            //    655416,
+            //    655425
+            //};
+
+            var testSet = new TempSet(3);
+
+            testSet[0] = 655403;
+            testSet[1] = 655416;
+            testSet[2] = 655425;
 
             var sorted = HyperLogLogPlus.SortEncodedSet(testSet, 3);
-            Assert.That(sorted, Is.EqualTo(new[] {655403, 655425, 655416}));
+            Assert.That(sorted._M[0], Is.EqualTo(new[] {655403, 655425, 655416}));
         }
 
         [Test]

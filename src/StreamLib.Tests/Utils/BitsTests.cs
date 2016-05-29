@@ -3,16 +3,17 @@ using System.Linq;
 using FsCheck;
 using NUnit.Framework;
 using StreamLib.Utils;
+using StreamLib.Cardinality;
 
 namespace StreamLib.Tests.Utils
 {
     [TestFixture]
     public class BitsTests
     {
-        static uint[] SlowGetBits(byte[] bytes)
+        static TempSet SlowGetBits(byte[] bytes)
         {
             int bitSize = bytes.Length / 4;
-            uint[] bits = new uint[bitSize];
+            TempSet bits = new TempSet (bitSize);
             using (var ms = new MemoryStream(bytes))
             using (var br = new BinaryReader(ms))
             {
