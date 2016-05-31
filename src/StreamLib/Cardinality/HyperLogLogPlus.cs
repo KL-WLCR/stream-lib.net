@@ -8,6 +8,8 @@ using StreamLib.Utils.Streams.System.IO;
 using UInt32 = StreamLib.Utils.UInt32;
 using UInt64 = StreamLib.Utils.UInt64;
 
+using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+
 namespace StreamLib.Cardinality
 {
     public class HyperLogLogPlus
@@ -24,7 +26,7 @@ namespace StreamLib.Cardinality
         const int SparseSetTempSetRatio = 4;
 
         //static readonly uint[] EmptySparse = new uint[0];
-        static readonly TempSet EmptySparse = new TempSet(0);
+        static readonly ChunkedArray EmptySparse = new ChunkedArray(0);
 
         // data from Appendix to HyperLogLog in Practice: Algorithmic Engineering of a State of the Art Cardinality Estimation Algorithm
         // http://goo.gl/iU8Ig
@@ -99,7 +101,7 @@ namespace StreamLib.Cardinality
         Format _format;
 
         RegisterSet _registerSet;
-        TempSet _sparseSet;
+        ChunkedArray _sparseSet;
 
         readonly uint _m;
         readonly uint _p;
@@ -113,7 +115,7 @@ namespace StreamLib.Cardinality
         // how big the sparse set is allowed to get before we convert to Normal
         readonly uint _sparseSetThreshold;
 
-        TempSet _tmpSet;
+        ChunkedArray _tmpSet;
 
         int _tmpIndex = 0;
 
@@ -136,7 +138,7 @@ namespace StreamLib.Cardinality
         {
         }
 
-        HyperLogLogPlus(uint p, uint sp, TempSet sparseSet, RegisterSet registerSet = null)
+        HyperLogLogPlus(uint p, uint sp, ChunkedArray sparseSet, RegisterSet registerSet = null)
         {
             if (p < 4 || (p > sp && sp != 0))
                 throw new ArgumentOutOfRangeException("p", "p must be between 4 and sp (inclusive)");
@@ -197,7 +199,7 @@ namespace StreamLib.Cardinality
                     // call the sparse encoding scheme which attempts to stuff as much helpful data into 32 bits as possible
                     uint k = EncodeHash(hash, _p, _sp);
                     if (_tmpSet == null)
-                        _tmpSet = new TempSet(InitialTempSetCapacity);
+                        _tmpSet = new ChunkedArray(InitialTempSetCapacity);
 
                     // put the encoded data into the temp set
                     _tmpSet[_tmpIndex++] = k;
@@ -296,10 +298,10 @@ namespace StreamLib.Cardinality
                         Varint.WriteUInt32((uint)Format.Sparse, wms);
                         Varint.WriteUInt32((uint)_sparseSet.Length, wms);
                         uint prevMergedDelta = 0;
-                        for ( var i = 0; i < _sparseSet.Length; ++i )
+                        foreach ( var k in _sparseSet )
                         {
-                            Varint.WriteUInt32(_sparseSet[i] - prevMergedDelta, wms);
-                            prevMergedDelta = _sparseSet[i];
+                            Varint.WriteUInt32(k - prevMergedDelta, wms);
+                            prevMergedDelta = k;
                         }
                         break;
                 }
@@ -329,7 +331,7 @@ namespace StreamLib.Cardinality
                 else
                 {
                     var size = Varint.ReadUInt32(rms);
-                    TempSet rehydratedSparseSet = new TempSet((int)size);
+                    ChunkedArray rehydratedSparseSet = new ChunkedArray((int)size);
                     uint prevDeltaRead = 0;
                     for (int i = 0; i < rehydratedSparseSet.Length; ++i)
                     {
@@ -429,9 +431,8 @@ namespace StreamLib.Cardinality
                 // of this' register set is several orders of magnitude faster than copying
                 // and converting other to normal mode. This use case is quite common since
                 // we tend to aggregate small sets to large sets.
-                for (var i = 0; i < other._sparseSet.Length; ++i)
-                {
-                    uint k = other._sparseSet[i];
+                foreach ( var k in other._sparseSet )
+                { 
                     uint idx = other.GetIndex(k, _p);
                     uint r = other.DecodeRunLength(k);
                     _registerSet.UpdateIfGreater(idx, r);
@@ -571,14 +572,14 @@ namespace StreamLib.Cardinality
         {
             if (_tmpIndex > 0)
             {
-                TempSet sortedSet = SortEncodedSet(_tmpSet, _tmpIndex);
+                ChunkedArray sortedSet = SortEncodedSet(_tmpSet, _tmpIndex);
                 _sparseSet = Merge(_sparseSet, sortedSet);
                 _tmpIndex = 0;
                 if (_sparseSet.Length > _sparseSetThreshold)
                     ConvertToNormal();
                 else if ((_tmpSet.Length * 2) < (_sparseSet.Length / SparseSetTempSetRatio))
                     //_tmpSet = new uint[_sparseSet.Length / SparseSetTempSetRatio];
-                    _tmpSet = new TempSet(_sparseSet.Length / SparseSetTempSetRatio);
+                    _tmpSet = new ChunkedArray(_sparseSet.Length / SparseSetTempSetRatio);
 
             }
         }
@@ -602,11 +603,11 @@ namespace StreamLib.Cardinality
 
         static readonly IComparer<uint> comparer = new Comparer();
 
-        internal static TempSet SortEncodedSet(TempSet encodedSet, int validIndex)
+        internal static ChunkedArray SortEncodedSet(ChunkedArray encodedSet, int validIndex)
         {
-            var tmpResult = new TempSet ( validIndex );
+            var tmpResult = new ChunkedArray ( validIndex );
             tmpResult.CopyFrom(encodedSet, validIndex);
-            return tmpResult.SortTempSet( comparer ) ;
+            return tmpResult.Sort( comparer ) ;
         }
 
         // get the idx' from an encoding
@@ -635,12 +636,12 @@ namespace StreamLib.Cardinality
         /// <param name="set">sparse set</param>
         /// <param name="tmp">list to be merged</param>
         /// <returns>the new sparse set</returns>
-        static TempSet Merge(TempSet set, TempSet tmp)
+        static ChunkedArray Merge(ChunkedArray set, ChunkedArray tmp)
         {
             // iterate over each set and merge the result values
 
             var setLength = set == null ? 0 : set.Length;
-            var newSet = new TempSet(setLength + tmp.Length);
+            var newSet = new ChunkedArray(setLength + tmp.Length);
             int ii = 0;
             int seti = 0;
             int tmpi = 0;
@@ -693,7 +694,7 @@ namespace StreamLib.Cardinality
         /// <param name="tmpIdx">the idx' we want to consume</param>
         /// <param name="tmpi">the current tmp list index</param>
         /// <returns>the new tmp list index</returns>
-        static int ConsumeDuplicates(TempSet tmp, uint tmpIdx, int tmpi)
+        static int ConsumeDuplicates(ChunkedArray tmp, uint tmpIdx, int tmpi)
         {
             while (tmpi < tmp.Length)
             {
@@ -714,18 +715,13 @@ namespace StreamLib.Cardinality
         {
             _registerSet = new RegisterSet(_m);
 
-            for (var i = 0; i< _sparseSet.Length; ++i)
+            foreach (uint k in _sparseSet)
             {
-                uint idx = GetIndex(_sparseSet[i], _p);
-                uint r = DecodeRunLength(_sparseSet[i]);
+                uint idx = GetIndex(k, _p);
+                uint r = DecodeRunLength(k);
                 _registerSet.UpdateIfGreater(idx, r);
             }
-            //foreach (uint k in _sparseSet)
-            //{
-            //    uint idx = GetIndex(k, _p);
-            //    uint r = DecodeRunLength(k);
-            //    _registerSet.UpdateIfGreater(idx, r);
-            //}
+
             _format = Format.Normal;
             _tmpSet = null;
             _sparseSet = null;
@@ -769,12 +765,12 @@ namespace StreamLib.Cardinality
         /// to worry about consuming duplicates.
         /// </summary>
         /// <returns>the new sparse set</returns>
-        TempSet MergeEstimators(HyperLogLogPlus other)
+        ChunkedArray MergeEstimators(HyperLogLogPlus other)
         {
-            TempSet tmp = other._sparseSet;
-            TempSet set = _sparseSet;
+            ChunkedArray tmp = other._sparseSet;
+            ChunkedArray set = _sparseSet;
 
-            var newSet = new TempSet(tmp.Length + set.Length);
+            var newSet = new ChunkedArray(tmp.Length + set.Length);
 
             // iterate over each set and merge the result values
             int ii = 0;

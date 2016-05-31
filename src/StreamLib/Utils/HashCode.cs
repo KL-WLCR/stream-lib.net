@@ -1,5 +1,7 @@
 using StreamLib.Cardinality;
 
+using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+
 namespace StreamLib.Utils
 {
     internal static class HashCode
@@ -17,7 +19,7 @@ namespace StreamLib.Utils
         }
 
         // todo possible optimization with unsafe implementation
-        public static int ForArray(TempSet array)
+        public static int ForArray(ChunkedArray array)
         {
             unchecked
             {

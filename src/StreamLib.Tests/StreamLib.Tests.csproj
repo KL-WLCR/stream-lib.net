@@ -55,6 +55,7 @@
     <Compile Include="Cardinality\RegisterSetTests.cs" />
     <Compile Include="Cardinality\TestBase.cs" />
     <Compile Include="Utils\BitsTests.cs" />
+    <Compile Include="Utils\ChunkedArrayTests.cs" />
     <Compile Include="Utils\UIntTests.cs" />
     <Compile Include="Cardinality\HyperLogLogPlusTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

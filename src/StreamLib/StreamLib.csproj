@@ -39,7 +39,7 @@
   <ItemGroup>
     <Compile Include="Cardinality\HyperLogLogPlus.cs" />
     <Compile Include="Cardinality\LinearCounter.cs" />
-    <Compile Include="Cardinality\TempSet.cs" />
+    <Compile Include="Utils\ChunkedArray.cs" />
     <Compile Include="Utils\Bits.cs" />
     <Compile Include="Utils\HashCode.cs" />
     <Compile Include="Utils\Streams\ReadOnlyMemoryStream.cs" />

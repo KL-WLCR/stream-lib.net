@@ -1,13 +1,15 @@
 ﻿using StreamLib.Cardinality;
 
+using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+
 namespace StreamLib.Utils
 {
     public static class Bits
     {
-        public static TempSet GetBits(byte[] bytes)
+        public static ChunkedArray GetBits(byte[] bytes)
         {
             var blocks = bytes.Length / 4;
-            var result = new TempSet (blocks);
+            var result = new ChunkedArray (blocks);
 
             unsafe
             {

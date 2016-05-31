@@ -5,6 +5,8 @@ using System.Linq;
 using NUnit.Framework;
 using StreamLib.Cardinality;
 
+using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+
 namespace StreamLib.Tests.Cardinality
 {
     [TestFixture]
@@ -136,26 +138,6 @@ namespace StreamLib.Tests.Cardinality
 
             var hll2 = HyperLogLogPlus.FromBytes(hll.ToBytes());
             Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
-        }
-
-        [Test]
-        public void SortEncodedSet()
-        {
-            //var testSet = new uint[]
-            //{
-            //    655403,
-            //    655416,
-            //    655425
-            //};
-
-            var testSet = new TempSet(3);
-
-            testSet[0] = 655403;
-            testSet[1] = 655416;
-            testSet[2] = 655425;
-
-            var sorted = HyperLogLogPlus.SortEncodedSet(testSet, 3);
-            Assert.That(sorted._M[0], Is.EqualTo(new[] {655403, 655425, 655416}));
         }
 
         [Test]

@@ -1,4 +1,6 @@
-﻿namespace StreamLib.Cardinality
+﻿using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+
+namespace StreamLib.Cardinality
 {
     public class RegisterSet
     {
@@ -11,12 +13,12 @@
         /// Readonly internal representation, do not modify it.
         /// </summary>
         //public readonly uint[] M;
-        public TempSet M;
+        public ChunkedArray M;
 
-        public RegisterSet(uint count, TempSet initialValues = null)
+        public RegisterSet(uint count, ChunkedArray initialValues = null)
         {
             Count = count;
-            M = initialValues ?? new TempSet((int)GetSizeForCount(count));
+            M = initialValues ?? new ChunkedArray((int)GetSizeForCount(count));
         }
 
         public override string ToString()

@@ -5,15 +5,17 @@ using NUnit.Framework;
 using StreamLib.Utils;
 using StreamLib.Cardinality;
 
+using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+
 namespace StreamLib.Tests.Utils
 {
     [TestFixture]
     public class BitsTests
     {
-        static TempSet SlowGetBits(byte[] bytes)
+        static ChunkedArray SlowGetBits(byte[] bytes)
         {
             int bitSize = bytes.Length / 4;
-            TempSet bits = new TempSet (bitSize);
+            ChunkedArray bits = new ChunkedArray (bitSize);
             using (var ms = new MemoryStream(bytes))
             using (var br = new BinaryReader(ms))
             {
