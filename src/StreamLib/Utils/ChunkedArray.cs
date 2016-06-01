@@ -35,17 +35,18 @@ namespace StreamLib.Utils
 
         public IEnumerator<T> GetEnumerator()
         {
-            foreach (T[] t1 in _buffer)
+            var j = 0;
+            var i = 0;
+
+            for (; j < _rows -1; j++)
             {
-                if (t1 == null) break;
+                for (i = 0; i < _maxWidth; i++)
+                    yield return _buffer[j][i];
 
-                foreach (T t in t1)
-                {
-                    if (t == null) break;
-
-                    yield return t;
-                }
             }
+
+            for (i = 0; i < _lastArraySize; i++)
+                yield return _buffer[j][i];
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
@@ -159,18 +160,8 @@ namespace StreamLib.Utils
 
         public T this[uint i]
         {
-            get
-            {
-                int r = (int)i / _maxWidth;
-                int c = (int)i - r * _maxWidth;
-                return _buffer[r][c];
-            }
-            set
-            {
-                int r = (int)i / _maxWidth;
-                int c = (int)i - r * _maxWidth;
-                _buffer[r][c] = value;
-            }
+            get { return this[(int)i]; }
+            set { this[(int)i] = value; }
         }
 
         public T this[int i]

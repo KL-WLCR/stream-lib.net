@@ -40,6 +40,18 @@ namespace StreamLib.Tests.Utils
 
                 ++i;
             }
+
+            tst.SetSize(7);
+            i = 0;
+            foreach (var t in tst)
+            {
+                Assert.That(t, Is.EqualTo(i));
+
+                ++i;
+            }
+
+            Assert.That(i, Is.EqualTo(7));
+
         }
 
         class Comparer : IComparer<uint>
