@@ -15,7 +15,7 @@ namespace StreamLib.Utils
         int _lastArraySize;
         int _length;
 
-        public T[][] _buffer;
+        private T[][] _buffer;
 
         public ChunkedArray(int size, int chunkSize = 8000)
         {

@@ -25,7 +25,6 @@ namespace StreamLib.Cardinality
         // ratio of the sparse set size to the temp set size
         const int SparseSetTempSetRatio = 4;
 
-        //static readonly uint[] EmptySparse = new uint[0];
         static readonly ChunkedArray EmptySparse = new ChunkedArray(0);
 
         // data from Appendix to HyperLogLog in Practice: Algorithmic Engineering of a State of the Art Cardinality Estimation Algorithm
@@ -578,7 +577,6 @@ namespace StreamLib.Cardinality
                 if (_sparseSet.Length > _sparseSetThreshold)
                     ConvertToNormal();
                 else if ((_tmpSet.Length * 2) < (_sparseSet.Length / SparseSetTempSetRatio))
-                    //_tmpSet = new uint[_sparseSet.Length / SparseSetTempSetRatio];
                     _tmpSet = new ChunkedArray(_sparseSet.Length / SparseSetTempSetRatio);
 
             }
