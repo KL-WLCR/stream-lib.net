@@ -16,7 +16,7 @@ namespace StreamLib.Tests.Utils
         [Test]
         public void ChunkArrayEnumeration()
         {
-            var tst = new ChunkedArray(9, 5);
+            var tst = new ChunkedArray(9);
 
             uint i = 0;
 
@@ -70,47 +70,23 @@ namespace StreamLib.Tests.Utils
         [Test]
         public void ChunkArraySorting()
         {
-            var tst = new ChunkedArray(25, 5);
-            var tst_sorted = new ChunkedArray(25, 5);
+            var tst = new ChunkedArray(17000);
 
             uint i = 0;
 
-            for (i = 0; i < 25; ++i)
+            for (i = 0; i < 17000; ++i)
             {
-                tst[i] = 24 - i;
+                tst[i] = 16999 - i;
             }
 
-            tst_sorted = tst.Sort(comparer);
+            ChunkedArray.Sort(tst, 0, 17000, comparer);
 
             i = 0;
-            foreach (var t in tst_sorted)
+            foreach (var t in tst)
             {
                 Assert.That(t, Is.EqualTo(i));
 
                 ++i;
-            }
-
-        }
-
-        [Test]
-        public void ChunkArraySortingEqualsElements()
-        {
-            var tst = new ChunkedArray(25, 5);
-            var tst_sorted = new ChunkedArray(25, 5);
-
-            uint i = 0;
-
-            for (i = 0; i < 25; ++i)
-            {
-                tst[i] = 0;
-            }
-
-            tst_sorted = tst.Sort(comparer);
-
-            i = 0;
-            foreach (var t in tst_sorted)
-            {
-                Assert.That(t, Is.EqualTo(i));
             }
 
         }

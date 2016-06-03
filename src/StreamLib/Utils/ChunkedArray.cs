@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,17 +11,18 @@ namespace StreamLib.Utils
     public class ChunkedArray<T> : IEnumerable<T>
         where T : IComparable
     {
-        int _maxWidth;
+        readonly int _maxWidth = 8192;
         int _rows;
         int _lastArraySize;
         int _length;
+        int _capacity;
 
         private T[][] _buffer;
 
-        public ChunkedArray(int size, int chunkSize = 8000)
+        public ChunkedArray(int size)
         {
+            _capacity = size;
             _length = size;
-            _maxWidth = chunkSize;
             _rows = (size / _maxWidth) + 1;
             _lastArraySize = size - (_rows - 1) * _maxWidth;
             _buffer = new T[_rows][];
@@ -38,7 +40,7 @@ namespace StreamLib.Utils
             var j = 0;
             var i = 0;
 
-            for (; j < _rows -1; j++)
+            for (; j < _rows - 1; j++)
             {
                 for (i = 0; i < _maxWidth; i++)
                     yield return _buffer[j][i];
@@ -62,9 +64,32 @@ namespace StreamLib.Utils
 
         public void SetSize(int size)
         {
+            if (size > _capacity)
+                throw new Exception("New size bigger then capacity");
+
             _length = size;
             _rows = (size / _maxWidth) + 1;
             _lastArraySize = size - (_rows - 1) * _maxWidth;
+        }
+
+        public void ResetToSize(int size, T initialValue)
+        {
+            if (size > _capacity)
+                throw new Exception("New size bigger then capacity");
+
+            SetSize(size);
+
+            var j = 0;
+            var i = 0;
+
+            for (; j < _rows - 1; j++)
+            {
+                for (i = 0; i < _maxWidth; i++)
+                    _buffer[j][i] = initialValue;
+            }
+
+            for (i = 0; i < _lastArraySize; i++)
+                _buffer[j][i] = initialValue;
         }
 
         public void CopyFrom(ChunkedArray<T> source, int validIndex)
@@ -73,66 +98,15 @@ namespace StreamLib.Utils
 
             var i = 0;
 
-            for (; i < _rows-1; ++i)
+            for (; i < _rows - 1; ++i)
             {
-                Array.Copy(source._buffer[i], _buffer[i], _maxWidth );
+                Array.Copy(source._buffer[i], _buffer[i], _maxWidth);
             }
 
             Array.Copy(source._buffer[i], _buffer[i], _lastArraySize);
         }
 
-        public ChunkedArray<T> Sort(IComparer<T> comparer)
-        {
-            // Sort chunks
-            var i = 0;
-
-            for (; i < _rows - 1; ++i)
-            {
-                Array.Sort(_buffer[i], comparer);
-            }
-
-            Array.Sort(_buffer[i], 0, _lastArraySize, comparer);
-
-            // Merge join sorted chunks
-            var result = new ChunkedArray<T>(_length);
-            var positions = new int[_rows];
-            var start_t = 0;
-
-            for (var j = 0; j < _length; ++j)
-            {
-                while (positions[start_t] >= _maxWidth)
-                {
-                    ++start_t;
-                    if (start_t == _rows)
-                        break;
-                }
-
-                T minValue = _buffer[start_t][positions[start_t]];
-                int minPosition = 0;
-
-                for (var t = start_t; t < _rows; ++t)
-                {
-                    if (t == (_rows - 1) && positions[t] >= _lastArraySize)
-                        continue;
-
-                    if (positions[t] == _maxWidth)
-                        continue;
-
-                    if (comparer.Compare(_buffer[t][positions[t]], minValue) < 0)
-                    {
-                        minValue = _buffer[t][positions[t]];
-                        minPosition = t;
-                    }
-                }
-
-                ++positions[minPosition];
-                result[j] = minValue;
-            }
-
-            return result;
-        }
-
-        public bool SequenceEqual (ChunkedArray<T> other)
+        public bool SequenceEqual(ChunkedArray<T> other)
         {
             bool result = true;
 
@@ -151,7 +125,7 @@ namespace StreamLib.Utils
 
             for (var t = 0; t < _lastArraySize; ++t)
             {
-                if (_buffer[i][t].CompareTo( other._buffer[i][t] ) != 0 )
+                if (_buffer[i][t].CompareTo(other._buffer[i][t]) != 0)
                     return false;
             }
 
@@ -168,15 +142,193 @@ namespace StreamLib.Utils
         {
             get
             {
-                int r = i / _maxWidth;
-                int c = i - r * _maxWidth;
-                return _buffer[r][c];
+                return _buffer[i >> 13][0x1FFF & i];
             }
             set
             {
-                int r = i / _maxWidth;
-                int c = i - r * _maxWidth;
-                _buffer[r][c] = value;
+                _buffer[i >> 13][0x1FFF & i] = value;
+            }
+        }
+
+
+        internal static class IntrospectiveSortUtilities
+        {
+            // This is the threshold where Introspective sort switches to Insertion sort.
+            // Imperically, 16 seems to speed up most cases without slowing down others, at least for integers.
+            // Large value types may benefit from a smaller number.
+            internal const int IntrosortSizeThreshold = 16;
+
+            internal const int QuickSortDepthThreshold = 32;
+
+            internal static int FloorLog2(int n)
+            {
+                int result = 0;
+                while (n >= 1)
+                {
+                    result++;
+                    n = n / 2;
+                }
+                return result;
+            }
+
+        }
+
+        public static void Sort(ChunkedArray<T> keys, int index, int length, IComparer<T> comparer)
+        {
+            IntrospectiveSort(keys, index, length, comparer);
+        }
+
+        private static void SwapIfGreater(ChunkedArray<T> keys, IComparer<T> comparer, int a, int b)
+        {
+            if (a != b)
+            {
+                if (comparer.Compare(keys[a], keys[b]) > 0)
+                {
+                    T key = keys[a];
+                    keys[a] = keys[b];
+                    keys[b] = key;
+                }
+            }
+        }
+
+        private static void Swap(ChunkedArray<T> a, int i, int j)
+        {
+            if (i != j)
+            {
+                T t = a[i];
+                a[i] = a[j];
+                a[j] = t;
+            }
+        }
+
+        internal static void IntrospectiveSort(ChunkedArray<T> keys, int left, int length, IComparer<T> comparer)
+        {
+
+            if (length < 2)
+                return;
+
+            IntroSort(keys, left, length + left - 1, 2 * IntrospectiveSortUtilities.FloorLog2(keys.Length), comparer);
+        }
+
+        private static void IntroSort(ChunkedArray<T> keys, int lo, int hi, int depthLimit, IComparer<T> comparer)
+        {
+            while (hi > lo)
+            {
+                int partitionSize = hi - lo + 1;
+                if (partitionSize <= IntrospectiveSortUtilities.IntrosortSizeThreshold)
+                {
+                    if (partitionSize == 1)
+                    {
+                        return;
+                    }
+                    if (partitionSize == 2)
+                    {
+                        SwapIfGreater(keys, comparer, lo, hi);
+                        return;
+                    }
+                    if (partitionSize == 3)
+                    {
+                        SwapIfGreater(keys, comparer, lo, hi - 1);
+                        SwapIfGreater(keys, comparer, lo, hi);
+                        SwapIfGreater(keys, comparer, hi - 1, hi);
+                        return;
+                    }
+
+                    InsertionSort(keys, lo, hi, comparer);
+                    return;
+                }
+
+                if (depthLimit == 0)
+                {
+                    Heapsort(keys, lo, hi, comparer);
+                    return;
+                }
+                depthLimit--;
+
+                int p = PickPivotAndPartition(keys, lo, hi, comparer);
+                // Note we've already partitioned around the pivot and do not have to move the pivot again.
+                IntroSort(keys, p + 1, hi, depthLimit, comparer);
+                hi = p - 1;
+            }
+        }
+
+        private static int PickPivotAndPartition(ChunkedArray<T> keys, int lo, int hi, IComparer<T> comparer)
+        {
+            // Compute median-of-three.  But also partition them, since we've done the comparison.
+            int middle = lo + ((hi - lo) / 2);
+
+            // Sort lo, mid and hi appropriately, then pick mid as the pivot.
+            SwapIfGreater(keys, comparer, lo, middle);  // swap the low with the mid point
+            SwapIfGreater(keys, comparer, lo, hi);   // swap the low with the high
+            SwapIfGreater(keys, comparer, middle, hi); // swap the middle with the high
+
+            T pivot = keys[middle];
+            Swap(keys, middle, hi - 1);
+            int left = lo, right = hi - 1;  // We already partitioned lo and hi and put the pivot in hi - 1.  And we pre-increment & decrement below.
+
+            while (left < right)
+            {
+                while (comparer.Compare(keys[++left], pivot) < 0) ;
+                while (comparer.Compare(pivot, keys[--right]) < 0) ;
+
+                if (left >= right)
+                    break;
+
+                Swap(keys, left, right);
+            }
+
+            // Put pivot in the right location.
+            Swap(keys, left, (hi - 1));
+            return left;
+        }
+
+        private static void Heapsort(ChunkedArray<T> keys, int lo, int hi, IComparer<T> comparer)
+        {
+            int n = hi - lo + 1;
+            for (int i = n / 2; i >= 1; i = i - 1)
+            {
+                DownHeap(keys, i, n, lo, comparer);
+            }
+            for (int i = n; i > 1; i = i - 1)
+            {
+                Swap(keys, lo, lo + i - 1);
+                DownHeap(keys, 1, i - 1, lo, comparer);
+            }
+        }
+
+        private static void DownHeap(ChunkedArray<T> keys, int i, int n, int lo, IComparer<T> comparer)
+        {
+            T d = keys[lo + i - 1];
+            int child;
+            while (i <= n / 2)
+            {
+                child = 2 * i;
+                if (child < n && comparer.Compare(keys[lo + child - 1], keys[lo + child]) < 0)
+                {
+                    child++;
+                }
+                if (!(comparer.Compare(d, keys[lo + child - 1]) < 0))
+                    break;
+                keys[lo + i - 1] = keys[lo + child - 1];
+                i = child;
+            }
+            keys[lo + i - 1] = d;
+        }
+
+        private static void InsertionSort(ChunkedArray<T> keys, int lo, int hi, IComparer<T> comparer)
+        {
+            int i, j;
+            T t;
+            for (i = lo; i < hi; i++)
+            {
+                j = i;
+                t = keys[i + 1];
+                while (j >= lo && comparer.Compare(t, keys[j]) < 0)
+                {
+                    keys[j + 1] = keys[j];
+                    j--;
+                }
+                keys[j + 1] = t;
             }
         }
 

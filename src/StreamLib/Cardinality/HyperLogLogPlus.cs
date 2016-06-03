@@ -605,7 +605,8 @@ namespace StreamLib.Cardinality
         {
             var tmpResult = new ChunkedArray ( validIndex );
             tmpResult.CopyFrom(encodedSet, validIndex);
-            return tmpResult.Sort( comparer ) ;
+            ChunkedArray.Sort(tmpResult, 0, validIndex, comparer);
+            return tmpResult ;
         }
 
         // get the idx' from an encoding
