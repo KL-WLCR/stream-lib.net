@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace StreamLib.Utils
 {
     /// ChunkedArray is wrapper over jagged array. Used to avoid allocation in LOH large arrays.
-    public class ChunkedArray<T> : IEnumerable<T>
+    public class ChunkedArray<T> : IEnumerable<T>, IDisposable
         where T : IComparable
     {
         readonly int _maxWidth = 8192;
@@ -19,20 +19,33 @@ namespace StreamLib.Utils
 
         private T[][] _buffer;
 
-        public ChunkedArray(int size)
+        ArrayPool<T> _pool;
+
+        public ChunkedArray(int size, ArrayPool<T> pool = null)
         {
+            _pool = pool;
             _capacity = size;
             _length = size;
             _rows = (size / _maxWidth) + 1;
             _lastArraySize = size - (_rows - 1) * _maxWidth;
             _buffer = new T[_rows][];
 
-            for (var i = 0; i < _rows - 1; ++i)
+            if (pool != null)
             {
-                _buffer[i] = new T[_maxWidth];
+                for (var i = 0; i < _rows; ++i)
+                {
+                    _buffer[i] = pool.Allocate (_maxWidth);
+                }
             }
+            else
+            {
+                for (var i = 0; i < _rows - 1; ++i)
+                {
+                    _buffer[i] = new T[_maxWidth];
+                }
 
-            _buffer[_rows - 1] = new T[_lastArraySize];
+                _buffer[_rows - 1] = new T[_lastArraySize];
+            }
         }
 
         public IEnumerator<T> GetEnumerator()
@@ -150,6 +163,18 @@ namespace StreamLib.Utils
             }
         }
 
+        public void Dispose()
+        {
+            if (_pool != null)
+            {
+                for (var i = 0; i< _rows; ++i)
+                {
+                    _pool.Free(_buffer[i]);
+                }
+            }
+        }
+
+        // Sorting implementation 
 
         internal static class IntrospectiveSortUtilities
         {

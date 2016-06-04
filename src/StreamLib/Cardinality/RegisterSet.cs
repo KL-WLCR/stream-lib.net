@@ -1,8 +1,10 @@
-﻿using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+﻿using System;
+using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+using ArrayPool = StreamLib.Utils.ArrayPool<uint>;
 
 namespace StreamLib.Cardinality
 {
-    public class RegisterSet
+    public class RegisterSet : IDisposable
     {
         const uint Log2BitsPerWord = 6;
         const int RegisterSize = 5;
@@ -14,11 +16,13 @@ namespace StreamLib.Cardinality
         /// </summary>
         //public readonly uint[] M;
         public ChunkedArray M;
+        private ArrayPool _pool;
 
-        public RegisterSet(uint count, ChunkedArray initialValues = null)
+        public RegisterSet(uint count, ChunkedArray initialValues = null, ArrayPool pool = null)
         {
             Count = count;
-            M = initialValues ?? new ChunkedArray((int)GetSizeForCount(count));
+            _pool = pool;
+            M = initialValues ?? new ChunkedArray((int)GetSizeForCount(count), pool);
         }
 
         public override string ToString()
@@ -78,6 +82,14 @@ namespace StreamLib.Cardinality
                     word |= (thisVal < otherVal) ? otherVal : thisVal;
                 }
                 M[bucket] = word;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (M != null)
+            {
+                M.Dispose();
             }
         }
     }
