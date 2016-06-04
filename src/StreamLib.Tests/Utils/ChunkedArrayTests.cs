@@ -95,28 +95,28 @@ namespace StreamLib.Tests.Utils
         [Test]
         public void ChunkArraySortingPooling()
         {
-            var pool = new ArrayPool();
+            var pool = new ArrayPool(17000, 8, 0);
 
-            using (var tst = new ChunkedArray(17000, pool))
+            var tst = new ChunkedArray(17000, pool);
+
+            uint i = 0;
+
+            for (i = 0; i < 17000; ++i)
             {
-                uint i = 0;
-
-                for (i = 0; i < 17000; ++i)
-                {
-                    tst[i] = 16999 - i;
-                }
-
-                ChunkedArray.Sort(tst, 0, 17000, comparer);
-
-                i = 0;
-                foreach (var t in tst)
-                {
-                    Assert.That(t, Is.EqualTo(i));
-
-                    ++i;
-                }
+                tst[i] = 16999 - i;
             }
 
+            ChunkedArray.Sort(tst, 0, 17000, comparer);
+
+            i = 0;
+            foreach (var t in tst)
+            {
+                Assert.That(t, Is.EqualTo(i));
+
+                ++i;
+            }
+
+            tst.Dispose();
         }
 
     }

@@ -6,76 +6,65 @@ using System.Threading.Tasks;
 
 namespace StreamLib.Utils
 {
-    public class DisposableValue<T> : IDisposable
-    {
-        private readonly Action _dispose;
-
-        public DisposableValue(T value, Action dispose)
-        {
-            _dispose = dispose;
-            Value = value;
-        }
-
-        public T Value { get; private set; }
-
-        public void Dispose()
-        {
-            _dispose();
-        }
-
-        public static DisposableValue<T> Create(T value, Action dispose)
-        {
-            return new DisposableValue<T>(value, dispose);
-        }
-    }
-
     public class ArrayPool<T>
     {
-        private readonly Dictionary<int, Stack<T[]>> _pool = new Dictionary<int, Stack<T[]>>();
+        bool[] _slots;
+        T[][] _refs;
+        T _zero;
 
         public readonly T[] Empty = new T[0];
+        int _arraySize;
+        int _poolSize;
+        
 
-        public DisposableValue<T[]> AllocateDisposable(int size)
+        public ArrayPool ( int arraySize, int poolSize, T zero )
         {
-            var array = Allocate(size);
-            return DisposableValue<T[]>.Create(array, () => Free(array));
+            _zero = zero;
+            _slots = new bool[poolSize];
+            _refs = new T[poolSize][];
+            _arraySize = arraySize;
+            _poolSize = poolSize;
+
+            for (var i = 0; i< poolSize; i++ )
+            {
+                _slots[i] = false;
+                _refs[i] = new T[arraySize];
+            }
         }
 
-        public DisposableValue<T[]> Resize(DisposableValue<T[]> source, int size)
+        public T[] Rent()
         {
-            if (size < 0) throw new ArgumentOutOfRangeException("size", "Must be positive.");
+            for (var i = 0; i < _poolSize; i++)
+            {
+                if ( !_slots[i] )
+                {
+                    _slots[i] = true;
+                    return _refs[i];
+                }
+            }
 
-            var dest = AllocateDisposable(size);
-            Array.Copy(source.Value, dest.Value, size < source.Value.Length ? size : source.Value.Length);
-            source.Dispose();
-            return dest;
+            throw new Exception("Pool is full");
+
+            return new T[_arraySize];
         }
 
-        public virtual void Clear()
+        public void Free(T[] array)
         {
-            _pool.Clear();
-        }
+            for (var i = 0; i < _poolSize; i++)
+            {
+                if (array == _refs[i])
+                {
+                    _slots[i] = false;
+                    
+                    for (var j = 0; j < _arraySize; ++j)
+                    {
+                        _refs[i][j] = _zero;
+                    }
+                    return;
+                }
+            }
 
-        internal virtual T[] Allocate(int size)
-        {
-            if (size < 0) throw new ArgumentOutOfRangeException("size", "Must be positive.");
-
-            if (size == 0) return Empty;
-
-            Stack<T[]> candidates;
-            return _pool.TryGetValue(size, out candidates) && candidates.Count > 0 ? candidates.Pop() : new T[size];
-        }
-
-        internal virtual void Free(T[] array)
-        {
-            if (array == null) throw new ArgumentNullException("array");
-
-            if (array.Length == 0) return;
-
-            Stack<T[]> candidates;
-            if (!_pool.TryGetValue(array.Length, out candidates))
-                _pool.Add(array.Length, candidates = new Stack<T[]>());
-            candidates.Push(array);
+            array = null;
         }
     }
 }

@@ -115,6 +115,31 @@ namespace StreamLib.Tests.Cardinality
         }
 
         [Test]
+        public void HighCardinalityPool()
+        {
+            var sw = Stopwatch.StartNew();
+
+            var pool = HyperLogLogPlus.CreateMemPool();
+            var hll = new HyperLogLogPlus(18, 25, pool);
+
+            const int size = (int)10e6;
+
+            for (int i = 0; i < size; ++i)
+            {
+                var buf = new byte[8];
+                Rnd.NextBytes(buf);
+                hll.OfferHashed(Hash64(buf));
+            }
+            
+            Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
+            long estimate = hll.Cardinality();
+            double err = Math.Abs(estimate - size) / (double)size;
+            Console.WriteLine("Percentage error: " + err);
+            Assert.That(err, Is.LessThan(0.1));
+
+        }
+
+        [Test]
         public void Serialization_Normal()
         {
             var hll = new HyperLogLogPlus(5, 25);

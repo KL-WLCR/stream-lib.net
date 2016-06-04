@@ -34,7 +34,7 @@ namespace StreamLib.Utils
             {
                 for (var i = 0; i < _rows; ++i)
                 {
-                    _buffer[i] = pool.Allocate (_maxWidth);
+                    _buffer[i] = pool.Rent ();
                 }
             }
             else

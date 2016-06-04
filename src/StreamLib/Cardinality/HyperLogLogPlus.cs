@@ -326,6 +326,11 @@ namespace StreamLib.Cardinality
             }
         }
 
+        public static ArrayPool CreateMemPool()
+        {
+            return new ArrayPool(8192, 1000, 0);
+        }
+
         public static HyperLogLogPlus FromBytes(byte[] bytes, ArrayPool pool = null)
         {
             using (var rms = new ReadOnlyMemoryStream(bytes))
@@ -590,12 +595,20 @@ namespace StreamLib.Cardinality
             if (_tmpIndex > 0)
             {
                 ChunkedArray sortedSet = SortEncodedSet(_tmpSet, _tmpIndex, _pool);
-                _sparseSet = Merge(_sparseSet, sortedSet, _pool);
+                var sparseSet = Merge(_sparseSet, sortedSet, _pool);
+                if (_sparseSet != null) _sparseSet.Dispose();
+                _sparseSet = sparseSet;
+                sortedSet.Dispose();
+
                 _tmpIndex = 0;
                 if (_sparseSet.Length > _sparseSetThreshold)
                     ConvertToNormal();
                 else if ((_tmpSet.Length * 2) < (_sparseSet.Length / SparseSetTempSetRatio))
-                    _tmpSet = new ChunkedArray(_sparseSet.Length / SparseSetTempSetRatio, _pool);
+                {
+                    var tmpSet = new ChunkedArray(_sparseSet.Length / SparseSetTempSetRatio, _pool);
+                    if (_tmpSet != null) _tmpSet.Dispose();
+                    _tmpSet = tmpSet;
+                }
 
             }
         }
@@ -730,7 +743,10 @@ namespace StreamLib.Cardinality
         // Collisions are resolved by merely taking the max.
         void ConvertToNormal()
         {
-            _registerSet = new RegisterSet(_m);
+            if (_registerSet != null)
+                _registerSet.Dispose();
+
+            _registerSet = new RegisterSet(_m, null, _pool);
 
             foreach (uint k in _sparseSet)
             {
@@ -740,7 +756,14 @@ namespace StreamLib.Cardinality
             }
 
             _format = Format.Normal;
+
+            if (_tmpSet != null)
+                _tmpSet.Dispose();
             _tmpSet = null;
+
+            if (_sparseSet != null)
+                _sparseSet.Dispose();
+
             _sparseSet = null;
         }
 
