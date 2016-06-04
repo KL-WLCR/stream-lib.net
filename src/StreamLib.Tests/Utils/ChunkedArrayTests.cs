@@ -95,7 +95,7 @@ namespace StreamLib.Tests.Utils
         [Test]
         public void ChunkArraySortingPooling()
         {
-            var pool = new ArrayPool(17000, 8, 0);
+            var pool = new ArrayPool(17000, 8);
 
             var tst = new ChunkedArray(17000, pool);
 

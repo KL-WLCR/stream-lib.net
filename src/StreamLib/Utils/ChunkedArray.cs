@@ -167,10 +167,14 @@ namespace StreamLib.Utils
         {
             if (_pool != null)
             {
-                for (var i = 0; i< _rows; ++i)
+                var i = 0;
+
+                for (; i< _rows - 1; ++i)
                 {
-                    _pool.Free(_buffer[i]);
+                    _pool.Free(_buffer[i], _maxWidth);
                 }
+
+                _pool.Free(_buffer[i], _lastArraySize);
             }
         }
 

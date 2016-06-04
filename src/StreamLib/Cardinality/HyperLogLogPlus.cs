@@ -328,7 +328,7 @@ namespace StreamLib.Cardinality
 
         public static ArrayPool CreateMemPool()
         {
-            return new ArrayPool(8192, 1000, 0);
+            return new ArrayPool(8192, 1000);
         }
 
         public static HyperLogLogPlus FromBytes(byte[] bytes, ArrayPool pool = null)
