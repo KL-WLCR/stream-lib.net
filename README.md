@@ -1,5 +1,9 @@
 # stream-lib.net
 
-C# (.net) implementation HyperLogLog ( HyperLogLogPlus ) and LinearCounting algorithms. 
+C# (.net) implementation HyperLogLog ( HyperLogLogPlus ) and LinearCounting problemastic cardinality estimation algorithms. 
 Based on stream-lib https://github.com/addthis/stream-lib.
-Added some fixes to make library more GC-friendly. ( Add posibility to preallocate memory, avoid allocations on LOH ) 
+Added some fixes to make HyperLogLog more GC-friendly :
+ - Internal buffers allocated in SOH. 
+ - Added posibility to use array-pool in long-term calculations. 
+
+
