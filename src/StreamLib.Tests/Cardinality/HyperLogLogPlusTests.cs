@@ -115,13 +115,11 @@ namespace StreamLib.Tests.Cardinality
         }
 
         [Test]
-        public void HighCardinalityPool()
+        public void HighCardinalityWithPool()
         {
             var sw = Stopwatch.StartNew();
-
             var pool = HyperLogLogPlus.CreateMemPool();
             var hll = new HyperLogLogPlus(18, 25, pool);
-
             const int size = (int)10e6;
 
             for (int i = 0; i < size; ++i)
@@ -130,12 +128,91 @@ namespace StreamLib.Tests.Cardinality
                 Rnd.NextBytes(buf);
                 hll.OfferHashed(Hash64(buf));
             }
+
+            Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
+            long estimate = hll.Cardinality();
+            double err = Math.Abs(estimate - size) / (double)size;
+            Console.WriteLine("Percentage error: " + err);
+            Assert.That(err, Is.LessThan(0.1));
+        }
+
+        [Test]
+        public void HighCardinalityMerge()
+        {
+            var sw = Stopwatch.StartNew();
+
+            var hll = new HyperLogLogPlus(18, 25);
+            var hll_t = new HyperLogLogPlus(18, 25);
+            var buf = new byte[8];
+
+            const int size = (int)100000;
+
+            for (int i = 0; i < size / 100; ++i)
+            {
+                var hll3 = new HyperLogLogPlus(18, 25);
+
+                for (int j = 0; j < 100; ++j)
+                {
+                    Rnd.NextBytes(buf);
+                    hll3.OfferHashed(Hash64(buf));
+                }
+
+                hll_t = hll.Merge(hll3);
+
+                hll.Dispose();
+
+                hll = hll_t;
+
+                hll3.Dispose();
+            }
+
+            Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
+            long estimate = hll.Cardinality();
+            double err = Math.Abs(estimate - size) / (double)size;
+            Console.WriteLine("Percentage error: " + err);
+            Assert.That(err, Is.LessThan(0.1));
+
+            hll.Dispose();
+        }
+
+        [Test]
+        public void HighCardinalityMergeWithPool()
+        {
+            var sw = Stopwatch.StartNew();
+
+            var pool = HyperLogLogPlus.CreateMemPool();
+            var hll = new HyperLogLogPlus(18, 25, pool);
+            var hll_t = new HyperLogLogPlus(18, 25, pool);
+            var buf = new byte[8];
+
+            const int size = (int)100000;
+
+            for (int i = 0; i < size / 100; ++i)
+            {
+                var hll3 = new HyperLogLogPlus(18, 25, pool);
+
+                for (int j = 0; j < 100; ++j)
+                {
+                    Rnd.NextBytes(buf);
+                    hll3.OfferHashed(Hash64(buf));
+                }
+
+                hll_t = hll.Merge(hll3);
+
+                hll.Dispose();
+
+                hll = hll_t;
+
+                hll3.Dispose();
+            }
             
             Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
             long estimate = hll.Cardinality();
             double err = Math.Abs(estimate - size) / (double)size;
             Console.WriteLine("Percentage error: " + err);
             Assert.That(err, Is.LessThan(0.1));
+
+            hll.Dispose();
 
         }
 

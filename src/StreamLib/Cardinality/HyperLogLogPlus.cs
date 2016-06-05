@@ -439,7 +439,10 @@ namespace StreamLib.Cardinality
 
             if ((_format == Format.Sparse) && (other._format == Format.Sparse))
             {
-                _sparseSet = MergeEstimators(other);
+                var sparseSet = MergeEstimators(other);
+                if (_sparseSet != null) _sparseSet.Dispose();
+                _sparseSet = sparseSet;
+
                 if (_sparseSet.Length > _sparseSetThreshold)
                     ConvertToNormal();
                 return;
