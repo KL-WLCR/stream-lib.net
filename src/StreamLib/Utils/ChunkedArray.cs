@@ -35,8 +35,6 @@ namespace StreamLib.Utils
 
             if (pool != null)
             {
-                pool.EnlargePool();
-
                 for (var i = 0; i < _rows; ++i)
                 {
                     _buffer[i] = pool.Rent ();
@@ -180,7 +178,6 @@ namespace StreamLib.Utils
                 }
 
                 _pool.Free(_buffer[i], _lastArraySize);
-                _pool.ShrikPool();
             }
         }
 

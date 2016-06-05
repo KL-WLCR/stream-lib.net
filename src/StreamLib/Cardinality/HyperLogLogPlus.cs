@@ -333,7 +333,7 @@ namespace StreamLib.Cardinality
 
         public static ChunkPool CreateMemPool()
         {
-            return new ChunkPool(ChunkedArray._maxWidth, ArraysCount * MaxSingleArraySize / ChunkedArray._maxWidth );
+            return new ChunkPool(ChunkedArray._maxWidth );
         }
 
         public static HyperLogLogPlus FromBytes(byte[] bytes, ChunkPool pool = null)

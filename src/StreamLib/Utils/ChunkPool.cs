@@ -14,27 +14,40 @@ namespace StreamLib.Utils
         int _poolSize;
         int _requiredPoolSize;
         int _lastFree;
-        int _growSize;
 
-        public ChunkPool ( int arraySize, int growSize )
+        public ChunkPool ( int arraySize )
         {
             _refs = new T[100][];
-            _growSize = growSize;
             _arraySize = arraySize;
             _poolSize = 0;
             _requiredPoolSize = 0;
             _lastFree = 0;
         }
 
-        public void EnlargePool()
+        public T[] Rent()
         {
-            _requiredPoolSize += _growSize;
+            EnlargePool();
+
+            _lastFree++;
+            if (_poolSize == _lastFree) _lastFree = 0;
+            return _refs[_lastFree];
+        }
+
+        public void Free(T[] array, int freeSize)
+        {
+            Array.Clear(array, 0, freeSize);
+            ShrikPool();
+        }
+
+        private void EnlargePool()
+        {
+            ++_requiredPoolSize;
 
             if (_poolSize < _requiredPoolSize)
             {
                 Array.Resize<T[]>(ref _refs, _requiredPoolSize);
 
-                for ( var i = _poolSize; i < _requiredPoolSize; ++i)
+                for (var i = _poolSize; i < _requiredPoolSize; ++i)
                 {
                     _refs[i] = new T[_arraySize];
                 }
@@ -44,21 +57,9 @@ namespace StreamLib.Utils
 
         }
 
-        public void ShrikPool()
+        private void ShrikPool()
         {
-            _requiredPoolSize -= _growSize;
-        }
-
-        public T[] Rent()
-        {
-            _lastFree++;
-            if (_poolSize == _lastFree) _lastFree = 0;
-            return _refs[_lastFree];
-        }
-
-        public void Free(T[] array, int freeSize)
-        {
-            Array.Clear(array, 0, freeSize);
+            --_requiredPoolSize;
         }
 
     }
