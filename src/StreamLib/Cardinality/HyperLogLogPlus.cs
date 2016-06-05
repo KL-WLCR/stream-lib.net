@@ -9,16 +9,22 @@ using UInt32 = StreamLib.Utils.UInt32;
 using UInt64 = StreamLib.Utils.UInt64;
 
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+using ChunkPool = StreamLib.Utils.ChunkPool<uint>;
 
 namespace StreamLib.Cardinality
 {
-    public class HyperLogLogPlus
+    public class HyperLogLogPlus : IDisposable
     {
         enum Format
         {
             Normal = 0,
             Sparse = 1
         }
+
+        // Maximum size of single internal array 
+        const int MaxSingleArraySize = 65536;
+        // Count of arrays used 
+        const int ArraysCount = 4; 
 
         const int InitialTempSetCapacity = 4;
 
@@ -101,6 +107,8 @@ namespace StreamLib.Cardinality
 
         RegisterSet _registerSet;
         ChunkedArray _sparseSet;
+        ChunkedArray _tmpSet;
+        ChunkPool _pool;
 
         readonly uint _m;
         readonly uint _p;
@@ -114,8 +122,6 @@ namespace StreamLib.Cardinality
         // how big the sparse set is allowed to get before we convert to Normal
         readonly uint _sparseSetThreshold;
 
-        ChunkedArray _tmpSet;
-
         int _tmpIndex = 0;
 
         /// <summary>
@@ -127,17 +133,17 @@ namespace StreamLib.Cardinality
         /// </summary>
         /// <param name="p">the precision value for the normal set</param>
         /// <param name="sp">the precision value for the sparse set</param>
-        public HyperLogLogPlus(uint p, uint sp)
-            : this(p, sp, null)
+        public HyperLogLogPlus(uint p, uint sp, ChunkPool pool = null)
+            : this(p, sp, null, pool)
         {
         }
 
-        HyperLogLogPlus(uint p, uint sp, RegisterSet registerSet)
-            : this(p, sp, null, registerSet)
+        HyperLogLogPlus(uint p, uint sp, RegisterSet registerSet, ChunkPool pool = null)
+            : this(p, sp, null, registerSet, pool)
         {
         }
 
-        HyperLogLogPlus(uint p, uint sp, ChunkedArray sparseSet, RegisterSet registerSet = null)
+        HyperLogLogPlus(uint p, uint sp, ChunkedArray sparseSet, RegisterSet registerSet = null, ChunkPool pool = null)
         {
             if (p < 4 || (p > sp && sp != 0))
                 throw new ArgumentOutOfRangeException("p", "p must be between 4 and sp (inclusive)");
@@ -148,6 +154,8 @@ namespace StreamLib.Cardinality
             _m = (uint)Math.Pow(2, p);
             _format = Format.Normal;
             _registerSet = registerSet;
+            _pool = pool;
+
             if (registerSet == null)
             {
                 if (sp > 0) // use sparse representation
@@ -159,7 +167,7 @@ namespace StreamLib.Cardinality
                     _sparseSetThreshold = (uint)(_m * 0.75);
                 }
                 else
-                    _registerSet = new RegisterSet(_m);
+                    _registerSet = new RegisterSet(_m, null, _pool);
             }
 
             switch (p)
@@ -176,6 +184,21 @@ namespace StreamLib.Cardinality
                 default:
                     _alphamm = (0.7213 / (1 + 1.079 / _m)) * _m * _m;
                     break;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_pool != null)
+            {
+                if (_registerSet != null)
+                    _registerSet.Dispose();
+
+                if (_tmpSet != null)
+                    _tmpSet.Dispose();
+
+                if (_sparseSet != null)
+                    _sparseSet.Dispose();
             }
         }
 
@@ -198,7 +221,7 @@ namespace StreamLib.Cardinality
                     // call the sparse encoding scheme which attempts to stuff as much helpful data into 32 bits as possible
                     uint k = EncodeHash(hash, _p, _sp);
                     if (_tmpSet == null)
-                        _tmpSet = new ChunkedArray(InitialTempSetCapacity);
+                        _tmpSet = new ChunkedArray(InitialTempSetCapacity, _pool);
 
                     // put the encoded data into the temp set
                     _tmpSet[_tmpIndex++] = k;
@@ -222,7 +245,7 @@ namespace StreamLib.Cardinality
         /// <returns>a new estimator with their combined knowledge</returns>
         public HyperLogLogPlus Merge(params HyperLogLogPlus[] estimators)
         {
-            var merged = new HyperLogLogPlus(_p, _sp);
+            var merged = new HyperLogLogPlus(_p, _sp, _pool);
             merged.AddAll(this);
 
             if (estimators == null)
@@ -308,7 +331,12 @@ namespace StreamLib.Cardinality
             }
         }
 
-        public static HyperLogLogPlus FromBytes(byte[] bytes)
+        public static ChunkPool CreateMemPool()
+        {
+            return new ChunkPool(ChunkedArray._maxWidth );
+        }
+
+        public static HyperLogLogPlus FromBytes(byte[] bytes, ChunkPool pool = null)
         {
             using (var rms = new ReadOnlyMemoryStream(bytes))
             {
@@ -320,8 +348,8 @@ namespace StreamLib.Cardinality
                     var size = Varint.ReadUInt32(rms);
                     byte[] longArrayBytes = new byte[size];
                     rms.Read(longArrayBytes, 0, (int)size);
-                    var registerSet = new RegisterSet((uint)Math.Pow(2, p), Bits.GetBits(longArrayBytes));
-                    var hll = new HyperLogLogPlus(p, sp, registerSet)
+                    var registerSet = new RegisterSet((uint)Math.Pow(2, p), Bits.GetBits(longArrayBytes), pool);
+                    var hll = new HyperLogLogPlus(p, sp, registerSet, pool)
                     {
                         _format = Format.Normal
                     };
@@ -330,7 +358,7 @@ namespace StreamLib.Cardinality
                 else
                 {
                     var size = Varint.ReadUInt32(rms);
-                    ChunkedArray rehydratedSparseSet = new ChunkedArray((int)size);
+                    ChunkedArray rehydratedSparseSet = new ChunkedArray((int)size, pool);
                     uint prevDeltaRead = 0;
                     for (int i = 0; i < rehydratedSparseSet.Length; ++i)
                     {
@@ -338,7 +366,7 @@ namespace StreamLib.Cardinality
                         rehydratedSparseSet[i] = nextVal;
                         prevDeltaRead = nextVal;
                     }
-                    var hll = new HyperLogLogPlus(p, sp, rehydratedSparseSet)
+                    var hll = new HyperLogLogPlus(p, sp, rehydratedSparseSet, null, pool)
                     {
                         _format = Format.Sparse
                     };
@@ -411,7 +439,10 @@ namespace StreamLib.Cardinality
 
             if ((_format == Format.Sparse) && (other._format == Format.Sparse))
             {
-                _sparseSet = MergeEstimators(other);
+                var sparseSet = MergeEstimators(other);
+                if (_sparseSet != null) _sparseSet.Dispose();
+                _sparseSet = sparseSet;
+
                 if (_sparseSet.Length > _sparseSetThreshold)
                     ConvertToNormal();
                 return;
@@ -571,13 +602,21 @@ namespace StreamLib.Cardinality
         {
             if (_tmpIndex > 0)
             {
-                ChunkedArray sortedSet = SortEncodedSet(_tmpSet, _tmpIndex);
-                _sparseSet = Merge(_sparseSet, sortedSet);
+                ChunkedArray sortedSet = SortEncodedSet(_tmpSet, _tmpIndex, _pool);
+                var sparseSet = Merge(_sparseSet, sortedSet, _pool);
+                if (_sparseSet != null) _sparseSet.Dispose();
+                _sparseSet = sparseSet;
+                sortedSet.Dispose();
+
                 _tmpIndex = 0;
                 if (_sparseSet.Length > _sparseSetThreshold)
                     ConvertToNormal();
                 else if ((_tmpSet.Length * 2) < (_sparseSet.Length / SparseSetTempSetRatio))
-                    _tmpSet = new ChunkedArray(_sparseSet.Length / SparseSetTempSetRatio);
+                {
+                    var tmpSet = new ChunkedArray(_sparseSet.Length / SparseSetTempSetRatio, _pool);
+                    if (_tmpSet != null) _tmpSet.Dispose();
+                    _tmpSet = tmpSet;
+                }
 
             }
         }
@@ -601,9 +640,9 @@ namespace StreamLib.Cardinality
 
         static readonly IComparer<uint> comparer = new Comparer();
 
-        internal static ChunkedArray SortEncodedSet(ChunkedArray encodedSet, int validIndex)
+        internal static ChunkedArray SortEncodedSet(ChunkedArray encodedSet, int validIndex, ChunkPool _pool)
         {
-            var tmpResult = new ChunkedArray ( validIndex );
+            var tmpResult = new ChunkedArray ( validIndex, _pool );
             tmpResult.CopyFrom(encodedSet, validIndex);
             ChunkedArray.Sort(tmpResult, 0, validIndex, comparer);
             return tmpResult ;
@@ -635,12 +674,12 @@ namespace StreamLib.Cardinality
         /// <param name="set">sparse set</param>
         /// <param name="tmp">list to be merged</param>
         /// <returns>the new sparse set</returns>
-        static ChunkedArray Merge(ChunkedArray set, ChunkedArray tmp)
+        static ChunkedArray Merge(ChunkedArray set, ChunkedArray tmp, ChunkPool _pool)
         {
             // iterate over each set and merge the result values
 
             var setLength = set == null ? 0 : set.Length;
-            var newSet = new ChunkedArray(setLength + tmp.Length);
+            var newSet = new ChunkedArray(setLength + tmp.Length, _pool);
             int ii = 0;
             int seti = 0;
             int tmpi = 0;
@@ -712,7 +751,10 @@ namespace StreamLib.Cardinality
         // Collisions are resolved by merely taking the max.
         void ConvertToNormal()
         {
-            _registerSet = new RegisterSet(_m);
+            if (_registerSet != null)
+                _registerSet.Dispose();
+
+            _registerSet = new RegisterSet(_m, null, _pool);
 
             foreach (uint k in _sparseSet)
             {
@@ -722,7 +764,14 @@ namespace StreamLib.Cardinality
             }
 
             _format = Format.Normal;
+
+            if (_tmpSet != null)
+                _tmpSet.Dispose();
             _tmpSet = null;
+
+            if (_sparseSet != null)
+                _sparseSet.Dispose();
+
             _sparseSet = null;
         }
 
@@ -769,7 +818,7 @@ namespace StreamLib.Cardinality
             ChunkedArray tmp = other._sparseSet;
             ChunkedArray set = _sparseSet;
 
-            var newSet = new ChunkedArray(tmp.Length + set.Length);
+            var newSet = new ChunkedArray(tmp.Length + set.Length, _pool);
 
             // iterate over each set and merge the result values
             int ii = 0;

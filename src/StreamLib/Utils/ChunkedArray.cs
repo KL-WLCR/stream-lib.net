@@ -8,10 +8,13 @@ using System.Threading.Tasks;
 namespace StreamLib.Utils
 {
     /// ChunkedArray is wrapper over jagged array. Used to avoid allocation in LOH large arrays.
-    public class ChunkedArray<T> : IEnumerable<T>
+    public class ChunkedArray<T> : IEnumerable<T>, IDisposable
         where T : IComparable
     {
-        readonly int _maxWidth = 8192;
+        public const int _maxWidth = 8192;
+        const int _columnStartBit = 13;
+        const int _rowPositionBitMask = 0x1FFF;
+
         int _rows;
         int _lastArraySize;
         int _length;
@@ -19,20 +22,33 @@ namespace StreamLib.Utils
 
         private T[][] _buffer;
 
-        public ChunkedArray(int size)
+        ChunkPool<T> _pool;
+
+        public ChunkedArray(int size, ChunkPool<T> pool = null)
         {
+            _pool = pool;
             _capacity = size;
             _length = size;
             _rows = (size / _maxWidth) + 1;
             _lastArraySize = size - (_rows - 1) * _maxWidth;
             _buffer = new T[_rows][];
 
-            for (var i = 0; i < _rows - 1; ++i)
+            if (pool != null)
             {
-                _buffer[i] = new T[_maxWidth];
+                for (var i = 0; i < _rows; ++i)
+                {
+                    _buffer[i] = pool.Rent ();
+                }
             }
+            else
+            {
+                for (var i = 0; i < _rows - 1; ++i)
+                {
+                    _buffer[i] = new T[_maxWidth];
+                }
 
-            _buffer[_rows - 1] = new T[_lastArraySize];
+                _buffer[_rows - 1] = new T[_lastArraySize];
+            }
         }
 
         public IEnumerator<T> GetEnumerator()
@@ -142,14 +158,30 @@ namespace StreamLib.Utils
         {
             get
             {
-                return _buffer[i >> 13][0x1FFF & i];
+                return _buffer[i >> _columnStartBit][_rowPositionBitMask & i];
             }
             set
             {
-                _buffer[i >> 13][0x1FFF & i] = value;
+                _buffer[i >> _columnStartBit][_rowPositionBitMask & i] = value;
             }
         }
 
+        public void Dispose()
+        {
+            if (_pool != null)
+            {
+                var i = 0;
+
+                for (; i< _rows - 1; ++i)
+                {
+                    _pool.Free(_buffer[i], _maxWidth);
+                }
+
+                _pool.Free(_buffer[i], _lastArraySize);
+            }
+        }
+
+        // Sorting implementation 
 
         internal static class IntrospectiveSortUtilities
         {
