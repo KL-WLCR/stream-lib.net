@@ -32,17 +32,11 @@ namespace StreamLib.Utils
         {
             EnlargePool();
 
-            var j = 0;
             var _retPos = 0;
             while (_slots[_lastFree])
             {
                 ++_lastFree;
                 if (_poolSize == _lastFree) _lastFree = 0;
-
-                ++j;
-
-                if (j > _poolSize)
-                    throw new Exception("Something going wrong");
             }
 
             _slots[_lastFree] = true;
