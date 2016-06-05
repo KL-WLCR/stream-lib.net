@@ -6,7 +6,7 @@ using StreamLib.Utils;
 using StreamLib.Cardinality;
 
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
-using ArrayPool = StreamLib.Utils.ArrayPool<uint>;
+using ChunkPool = StreamLib.Utils.ChunkPool<uint>;
 using System.Collections.Generic;
 
 namespace StreamLib.Tests.Utils
@@ -95,7 +95,7 @@ namespace StreamLib.Tests.Utils
         [Test]
         public void ChunkArraySortingPooling()
         {
-            var pool = new ArrayPool(17000, 8);
+            var pool = new ChunkPool(17000, 4);
 
             var tst = new ChunkedArray(17000, pool);
 

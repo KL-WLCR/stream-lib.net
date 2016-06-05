@@ -1,6 +1,6 @@
 ﻿using System;
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
-using ArrayPool = StreamLib.Utils.ArrayPool<uint>;
+using ChunkPool = StreamLib.Utils.ChunkPool<uint>;
 
 namespace StreamLib.Cardinality
 {
@@ -16,9 +16,9 @@ namespace StreamLib.Cardinality
         /// </summary>
         //public readonly uint[] M;
         public ChunkedArray M;
-        private ArrayPool _pool;
+        private ChunkPool _pool;
 
-        public RegisterSet(uint count, ChunkedArray initialValues = null, ArrayPool pool = null)
+        public RegisterSet(uint count, ChunkedArray initialValues = null, ChunkPool pool = null)
         {
             Count = count;
             _pool = pool;

@@ -98,7 +98,7 @@ namespace StreamLib.Tests.Cardinality
             var sw = Stopwatch.StartNew();
 
             var hll = new HyperLogLogPlus(18, 25);
-            const int size = (int)10e6;
+            const int size = (int)10e7;
 
             for (int i = 0; i < size; ++i)
             {
@@ -122,7 +122,7 @@ namespace StreamLib.Tests.Cardinality
             var pool = HyperLogLogPlus.CreateMemPool();
             var hll = new HyperLogLogPlus(18, 25, pool);
 
-            const int size = (int)10e6;
+            const int size = (int)10e7;
 
             for (int i = 0; i < size; ++i)
             {

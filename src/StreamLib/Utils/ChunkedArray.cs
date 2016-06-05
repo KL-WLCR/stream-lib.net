@@ -11,7 +11,10 @@ namespace StreamLib.Utils
     public class ChunkedArray<T> : IEnumerable<T>, IDisposable
         where T : IComparable
     {
-        readonly int _maxWidth = 8192;
+        public const int _maxWidth = 8192;
+        const int _columnStartBit = 13;
+        const int _rowPositionBitMask = 0x1FFF;
+
         int _rows;
         int _lastArraySize;
         int _length;
@@ -19,9 +22,9 @@ namespace StreamLib.Utils
 
         private T[][] _buffer;
 
-        ArrayPool<T> _pool;
+        ChunkPool<T> _pool;
 
-        public ChunkedArray(int size, ArrayPool<T> pool = null)
+        public ChunkedArray(int size, ChunkPool<T> pool = null)
         {
             _pool = pool;
             _capacity = size;
@@ -32,6 +35,8 @@ namespace StreamLib.Utils
 
             if (pool != null)
             {
+                pool.EnlargePool();
+
                 for (var i = 0; i < _rows; ++i)
                 {
                     _buffer[i] = pool.Rent ();
@@ -155,11 +160,11 @@ namespace StreamLib.Utils
         {
             get
             {
-                return _buffer[i >> 13][0x1FFF & i];
+                return _buffer[i >> _columnStartBit][_rowPositionBitMask & i];
             }
             set
             {
-                _buffer[i >> 13][0x1FFF & i] = value;
+                _buffer[i >> _columnStartBit][_rowPositionBitMask & i] = value;
             }
         }
 
@@ -175,6 +180,7 @@ namespace StreamLib.Utils
                 }
 
                 _pool.Free(_buffer[i], _lastArraySize);
+                _pool.ShrikPool();
             }
         }
 

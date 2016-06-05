@@ -9,7 +9,7 @@ using UInt32 = StreamLib.Utils.UInt32;
 using UInt64 = StreamLib.Utils.UInt64;
 
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
-using ArrayPool = StreamLib.Utils.ArrayPool<uint>;
+using ChunkPool = StreamLib.Utils.ChunkPool<uint>;
 
 namespace StreamLib.Cardinality
 {
@@ -20,6 +20,11 @@ namespace StreamLib.Cardinality
             Normal = 0,
             Sparse = 1
         }
+
+        // Maximum size of single internal array 
+        const int MaxSingleArraySize = 65536;
+        // Count of arrays used 
+        const int ArraysCount = 4; 
 
         const int InitialTempSetCapacity = 4;
 
@@ -103,7 +108,7 @@ namespace StreamLib.Cardinality
         RegisterSet _registerSet;
         ChunkedArray _sparseSet;
         ChunkedArray _tmpSet;
-        ArrayPool _pool;
+        ChunkPool _pool;
 
         readonly uint _m;
         readonly uint _p;
@@ -128,17 +133,17 @@ namespace StreamLib.Cardinality
         /// </summary>
         /// <param name="p">the precision value for the normal set</param>
         /// <param name="sp">the precision value for the sparse set</param>
-        public HyperLogLogPlus(uint p, uint sp, ArrayPool pool = null)
+        public HyperLogLogPlus(uint p, uint sp, ChunkPool pool = null)
             : this(p, sp, null, pool)
         {
         }
 
-        HyperLogLogPlus(uint p, uint sp, RegisterSet registerSet, ArrayPool pool = null)
+        HyperLogLogPlus(uint p, uint sp, RegisterSet registerSet, ChunkPool pool = null)
             : this(p, sp, null, registerSet, pool)
         {
         }
 
-        HyperLogLogPlus(uint p, uint sp, ChunkedArray sparseSet, RegisterSet registerSet = null, ArrayPool pool = null)
+        HyperLogLogPlus(uint p, uint sp, ChunkedArray sparseSet, RegisterSet registerSet = null, ChunkPool pool = null)
         {
             if (p < 4 || (p > sp && sp != 0))
                 throw new ArgumentOutOfRangeException("p", "p must be between 4 and sp (inclusive)");
@@ -326,12 +331,12 @@ namespace StreamLib.Cardinality
             }
         }
 
-        public static ArrayPool CreateMemPool()
+        public static ChunkPool CreateMemPool()
         {
-            return new ArrayPool(8192, 1000);
+            return new ChunkPool(ChunkedArray._maxWidth, ArraysCount * MaxSingleArraySize / ChunkedArray._maxWidth );
         }
 
-        public static HyperLogLogPlus FromBytes(byte[] bytes, ArrayPool pool = null)
+        public static HyperLogLogPlus FromBytes(byte[] bytes, ChunkPool pool = null)
         {
             using (var rms = new ReadOnlyMemoryStream(bytes))
             {
@@ -632,7 +637,7 @@ namespace StreamLib.Cardinality
 
         static readonly IComparer<uint> comparer = new Comparer();
 
-        internal static ChunkedArray SortEncodedSet(ChunkedArray encodedSet, int validIndex, ArrayPool _pool)
+        internal static ChunkedArray SortEncodedSet(ChunkedArray encodedSet, int validIndex, ChunkPool _pool)
         {
             var tmpResult = new ChunkedArray ( validIndex, _pool );
             tmpResult.CopyFrom(encodedSet, validIndex);
@@ -666,7 +671,7 @@ namespace StreamLib.Cardinality
         /// <param name="set">sparse set</param>
         /// <param name="tmp">list to be merged</param>
         /// <returns>the new sparse set</returns>
-        static ChunkedArray Merge(ChunkedArray set, ChunkedArray tmp, ArrayPool _pool)
+        static ChunkedArray Merge(ChunkedArray set, ChunkedArray tmp, ChunkPool _pool)
         {
             // iterate over each set and merge the result values
 
