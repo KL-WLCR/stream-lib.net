@@ -9,6 +9,7 @@ using UInt32 = StreamLib.Utils.UInt32;
 using UInt64 = StreamLib.Utils.UInt64;
 
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+using ChunkedByteArray = StreamLib.Utils.ChunkedArray<byte>;
 using ChunkPool = StreamLib.Utils.ChunkPool<uint>;
 
 namespace StreamLib.Cardinality
@@ -335,6 +336,44 @@ namespace StreamLib.Cardinality
         {
             return new ChunkPool(ChunkedArray._maxWidth );
         }
+
+        public static HyperLogLogPlus FromChunkedArray(ChunkedByteArray bytes, ChunkPool pool = null)
+        {
+            int position = 0;
+
+            var p = Varint.ReadUInt32(bytes, ref position);
+            var sp = Varint.ReadUInt32(bytes, ref position);
+            var format = (Format)Varint.ReadUInt32(bytes, ref position);  
+            var size = Varint.ReadUInt32(bytes, ref position);
+
+            if (format == Format.Normal)
+            {
+                var registerSet = new RegisterSet((uint)Math.Pow(2, p), Bits.GetBits(bytes, position), pool);
+                var hll = new HyperLogLogPlus(p, sp, registerSet, pool)
+                {
+                    _format = Format.Normal
+                };
+                return hll;
+            }
+            else
+            {
+                ChunkedArray rehydratedSparseSet = new ChunkedArray((int)size, pool);
+                uint prevDeltaRead = 0;
+                for (int i = 0; i < rehydratedSparseSet.Length; ++i)
+                {
+                    var nextFromStream = Varint.ReadUInt32(bytes, ref position); 
+                    uint nextVal = nextFromStream + prevDeltaRead;
+                    rehydratedSparseSet[i] = nextVal;
+                    prevDeltaRead = nextVal;
+                }
+                var hll = new HyperLogLogPlus(p, sp, rehydratedSparseSet, null, pool)
+                {
+                    _format = Format.Sparse
+                };
+                return hll;
+            }
+        }
+
 
         public static HyperLogLogPlus FromBytes(byte[] bytes, ChunkPool pool = null)
         {

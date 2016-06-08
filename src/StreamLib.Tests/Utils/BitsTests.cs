@@ -6,6 +6,7 @@ using StreamLib.Utils;
 using StreamLib.Cardinality;
 
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+using ChunkedByteArray = StreamLib.Utils.ChunkedArray<byte>;
 
 namespace StreamLib.Tests.Utils
 {
@@ -32,6 +33,16 @@ namespace StreamLib.Tests.Utils
             Prop.ForAll(
                 Arb.From(inputGen),
                 bytes =>  Bits.GetBits(bytes).SequenceEqual(SlowGetBits(bytes)))
+            .QuickCheckThrowOnFailure();
+        }
+
+        [Test]
+        public void GetBitsChunked()
+        {
+            var inputGen = Arb.Generate<byte[]>().Where(ar => ar.Length > 0 && ar.Length % 4 == 0);
+            Prop.ForAll(
+                Arb.From(inputGen),
+                bytes => Bits.GetBits(ChunkedByteArray.CreateFromArray(bytes)).SequenceEqual(SlowGetBits(bytes)))
             .QuickCheckThrowOnFailure();
         }
     }

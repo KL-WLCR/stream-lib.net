@@ -37,7 +37,7 @@ namespace StreamLib.Utils
             {
                 for (var i = 0; i < _rows; ++i)
                 {
-                    _buffer[i] = pool.Rent ();
+                    _buffer[i] = pool.Rent();
                 }
             }
             else
@@ -49,6 +49,18 @@ namespace StreamLib.Utils
 
                 _buffer[_rows - 1] = new T[_lastArraySize];
             }
+        }
+
+        public T[] GetPart(int from, int length)
+        {
+            var result = new T[length];
+
+            for (var i = 0; i < length; ++i)
+            {
+                result[i] = this[from + i];
+            }
+
+            return result;
         }
 
         public IEnumerator<T> GetEnumerator()
@@ -106,6 +118,20 @@ namespace StreamLib.Utils
 
             for (i = 0; i < _lastArraySize; i++)
                 _buffer[j][i] = initialValue;
+        }
+
+        // TODO : increase speed
+        public static ChunkedArray<T> CreateFromArray(T[] source)
+        {
+            ChunkedArray<T> result = new ChunkedArray<T>(source.Length);
+
+            var i = 0;
+            foreach ( var t in source )
+            {
+                result[i++] = t;
+            }
+
+            return result;
         }
 
         public void CopyFrom(ChunkedArray<T> source, int validIndex)
