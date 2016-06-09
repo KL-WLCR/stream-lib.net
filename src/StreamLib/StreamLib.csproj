@@ -44,6 +44,7 @@
     <Compile Include="Utils\Bits.cs" />
     <Compile Include="Utils\HashCode.cs" />
     <Compile Include="Utils\Streams\ReadOnlyMemoryStream.cs" />
+    <Compile Include="Utils\Streams\ReadOnlyChunkedArrayStream.cs" />
     <Compile Include="Utils\UInt64.cs" />
     <Compile Include="Utils\UInt32.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

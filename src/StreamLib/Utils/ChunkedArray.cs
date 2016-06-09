@@ -51,6 +51,11 @@ namespace StreamLib.Utils
             }
         }
 
+        public T[] GetChunk(int position)
+        {
+            return _buffer[position];
+        }
+
         public T[] GetPart(int from, int length)
         {
             var result = new T[length];
