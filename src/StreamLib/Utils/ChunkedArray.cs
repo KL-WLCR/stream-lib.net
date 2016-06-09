@@ -19,6 +19,7 @@ namespace StreamLib.Utils
         int _lastArraySize;
         int _length;
         int _capacity;
+        bool _isPossibleResize;
 
         private T[][] _buffer;
 
@@ -29,25 +30,39 @@ namespace StreamLib.Utils
             _pool = pool;
             _capacity = size;
             _length = size;
-            _rows = (size / _maxWidth) + 1;
-            _lastArraySize = size - (_rows - 1) * _maxWidth;
-            _buffer = new T[_rows][];
 
-            if (pool != null)
+            if (size > 0)
             {
-                for (var i = 0; i < _rows; ++i)
-                {
-                    _buffer[i] = pool.Rent();
-                }
+                _isPossibleResize = false;
+                _rows = (size / _maxWidth) + 1;
+                _lastArraySize = size - (_rows - 1) * _maxWidth;
+                _buffer = new T[_rows][];
             }
             else
             {
-                for (var i = 0; i < _rows - 1; ++i)
-                {
-                    _buffer[i] = new T[_maxWidth];
-                }
+                _isPossibleResize = true;
+                _rows = 0;
+                _lastArraySize = 0;
+            }
 
-                _buffer[_rows - 1] = new T[_lastArraySize];
+            if (_rows > 0)
+            {
+                if (pool != null)
+                {
+                    for (var i = 0; i < _rows; ++i)
+                    {
+                        _buffer[i] = pool.Rent();
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i < _rows - 1; ++i)
+                    {
+                        _buffer[i] = new T[_maxWidth];
+                    }
+
+                    _buffer[_rows - 1] = new T[_lastArraySize];
+                }
             }
         }
 
@@ -70,21 +85,23 @@ namespace StreamLib.Utils
 
         public void AddChunk()
         {
-            _capacity += _maxWidth;
+            if (!_isPossibleResize)
+                throw new Exception("Resize not possible");
 
-            SetSize(_length + _maxWidth);
+            _capacity += _maxWidth;
+            _rows += 1;
+            _length += _maxWidth;
+            _lastArraySize = _maxWidth;
 
             Array.Resize<T[]>(ref _buffer, _rows);
 
-            _buffer[_rows - 1] = _buffer[_rows - 2];
-
             if (_pool != null)
             {
-                _buffer[_rows - 2] = _pool.Rent();
+                _buffer[_rows - 1] = _pool.Rent();
             }
             else
             { 
-                _buffer[_rows - 2] = new T[_maxWidth];
+                _buffer[_rows - 1] = new T[_maxWidth];
             }
         }
 
