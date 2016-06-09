@@ -11,6 +11,7 @@ using UInt64 = StreamLib.Utils.UInt64;
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
 using ChunkedByteArray = StreamLib.Utils.ChunkedArray<byte>;
 using ChunkPool = StreamLib.Utils.ChunkPool<uint>;
+using ByteChunkPool = StreamLib.Utils.ChunkPool<byte>;
 
 namespace StreamLib.Cardinality
 {
@@ -332,12 +333,66 @@ namespace StreamLib.Cardinality
             }
         }
 
+
+        private void WriteUInt32(uint value, ChunkedByteArray output, ref int position)
+        {
+            if (position + 4 >= output.Length)
+                output.AddChunk();
+
+            output[position++] = (byte)value;
+            output[position++] = (byte)(value >> 8);
+            output[position++] = (byte)(value >> 16);
+            output[position++] = (byte)(value >> 24);
+        }
+
+        public ChunkedByteArray ToChunkedByteArray(ByteChunkPool pool = null)
+        {
+            var position = 0;
+            var result = new ChunkedByteArray(0, pool);
+
+            if (_format == Format.Sparse)
+                MergeTempList();
+
+            Varint.WriteUInt32(_p, result, ref position);
+            Varint.WriteUInt32(_sp, result, ref position);
+            if (_format == Format.Sparse)
+                MergeTempList();
+
+            switch (_format)
+            {
+                case Format.Normal:
+                    Varint.WriteUInt32((uint)Format.Normal, result, ref position);
+                    Varint.WriteUInt32((uint)_registerSet.M.Length * 4, result, ref position);
+                    for (var i = 0; i < _registerSet.M.Length; ++i)
+                    {
+                        this.WriteUInt32(_registerSet.M[i], result, ref position);
+                    }
+
+                    break;
+                case Format.Sparse:
+                    Varint.WriteUInt32((uint)Format.Sparse, result, ref position);
+                    Varint.WriteUInt32((uint)_sparseSet.Length, result, ref position);
+                    uint prevMergedDelta = 0;
+                    foreach (var k in _sparseSet)
+                    {
+                        Varint.WriteUInt32(k - prevMergedDelta, result, ref position);
+                        prevMergedDelta = k;
+                    }
+                    break;
+            }
+
+            result.SetSize(position);
+
+            return result;
+
+        }
+
         public static ChunkPool CreateMemPool()
         {
             return new ChunkPool(ChunkedArray._maxWidth );
         }
 
-        public static HyperLogLogPlus FromChunkedArray(ChunkedByteArray bytes, ChunkPool pool = null)
+        public static HyperLogLogPlus FromChunkedByteArray(ChunkedByteArray bytes, ChunkPool pool = null)
         {
             int position = 0;
 
@@ -719,7 +774,7 @@ namespace StreamLib.Cardinality
 
             var setLength = set == null ? 0 : set.Length;
             var newSet = new ChunkedArray(setLength + tmp.Length, _pool);
-            int ii = 0;
+            int position = 0;
             int seti = 0;
             int tmpi = 0;
             while ((seti < setLength) || (tmpi < tmp.Length))
@@ -727,13 +782,13 @@ namespace StreamLib.Cardinality
                 if (seti >= setLength)
                 {
                     uint tmpVal = tmp[tmpi];
-                    newSet[ii++] = tmpVal;
+                    newSet[position++] = tmpVal;
                     tmpi++;
                     tmpi = ConsumeDuplicates(tmp, GetSparseIndex(tmpVal), tmpi);
                 }
                 else if (tmpi >= tmp.Length)
                 {
-                    newSet[ii++] = set[seti++];
+                    newSet[position++] = set[seti++];
                 }
                 else
                 {
@@ -744,25 +799,25 @@ namespace StreamLib.Cardinality
                     var sparseIndexTmpVal = GetSparseIndex(tmpVal);
                     if (sparseIndexSetVal == sparseIndexTmpVal)
                     {
-                        newSet[ii++] = Math.Min(setVal, tmpVal);
+                        newSet[position++] = Math.Min(setVal, tmpVal);
                         tmpi++;
                         tmpi = ConsumeDuplicates(tmp, sparseIndexTmpVal, tmpi);
                         seti++;
                     }
                     else if (sparseIndexSetVal < sparseIndexTmpVal)
                     {
-                        newSet[ii++] = setVal;
+                        newSet[position++] = setVal;
                         seti++;
                     }
                     else
                     {
-                        newSet[ii++] = tmpVal;
+                        newSet[position++] = tmpVal;
                         tmpi++;
                         tmpi = ConsumeDuplicates(tmp, sparseIndexTmpVal, tmpi);
                     }
                 }
             }
-            newSet.SetSize(ii);
+            newSet.SetSize(position);
             return newSet;
         }
 
@@ -860,16 +915,16 @@ namespace StreamLib.Cardinality
             var newSet = new ChunkedArray(tmp.Length + set.Length, _pool);
 
             // iterate over each set and merge the result values
-            int ii = 0;
+            int position = 0;
             int seti = 0;
             int tmpi = 0;
             while ((seti < set.Length) || (tmpi < tmp.Length))
             {
                 if (seti >= set.Length)
-                    newSet[ii++] = tmp[tmpi++];
+                    newSet[position++] = tmp[tmpi++];
 
                 else if (tmpi >= tmp.Length)
-                    newSet[ii++] = set[seti++];
+                    newSet[position++] = set[seti++];
                 else
                 {
                     uint setVal = set[seti];
@@ -879,23 +934,23 @@ namespace StreamLib.Cardinality
                     var sparseIndexTmpVal = GetSparseIndex(tmpVal);
                     if (sparseIndexSetVal == sparseIndexTmpVal)
                     {
-                        newSet[ii++] = Math.Min(setVal, tmpVal);
+                        newSet[position++] = Math.Min(setVal, tmpVal);
                         tmpi++;
                         seti++;
                     }
                     else if (sparseIndexSetVal < sparseIndexTmpVal)
                     {
-                        newSet[ii++] = setVal;
+                        newSet[position++] = setVal;
                         seti++;
                     }
                     else
                     {
-                        newSet[ii++] = tmpVal;
+                        newSet[position++] = tmpVal;
                         tmpi++;
                     }
                 }
             }
-            newSet.SetSize(ii);
+            newSet.SetSize(position);
             return newSet;
         }
 

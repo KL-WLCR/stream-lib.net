@@ -237,7 +237,7 @@ namespace StreamLib.Tests.Cardinality
                 hll.OfferHashed(Hash64(i));
             Console.WriteLine(hll.Cardinality());
 
-            var hll2 = HyperLogLogPlus.FromChunkedArray(ChunkedByteArray.CreateFromArray(hll.ToBytes()));
+            var hll2 = HyperLogLogPlus.FromChunkedByteArray(hll.ToChunkedByteArray());
             Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
         }
 
@@ -265,7 +265,7 @@ namespace StreamLib.Tests.Cardinality
             hll.OfferHashed(Hash64("d"));
             hll.OfferHashed(Hash64("e"));
 
-            var hll2 = HyperLogLogPlus.FromChunkedArray(ChunkedByteArray.CreateFromArray(hll.ToBytes()));
+            var hll2 = HyperLogLogPlus.FromChunkedByteArray(hll.ToChunkedByteArray());
             Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
         }
 
@@ -308,7 +308,7 @@ namespace StreamLib.Tests.Cardinality
 
                     Console.WriteLine("hllcardinality={0} cardinality={1}", hll.Cardinality(), cardinality);
 
-                    var deserialized = HyperLogLogPlus.FromChunkedArray(ChunkedByteArray.CreateFromArray(hll.ToBytes()));
+                    var deserialized = HyperLogLogPlus.FromChunkedByteArray(hll.ToChunkedByteArray());
                     Assert.That(deserialized.Cardinality(), Is.EqualTo(hll.Cardinality()));
                     var merged = hll.Merge(deserialized);
                     Console.WriteLine(merged.Cardinality() + " : " + hll.Cardinality());

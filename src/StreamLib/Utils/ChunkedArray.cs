@@ -63,6 +63,26 @@ namespace StreamLib.Utils
             return result;
         }
 
+        public void AddChunk()
+        {
+            _capacity += _maxWidth;
+
+            SetSize(_length + _maxWidth);
+
+            Array.Resize<T[]>(ref _buffer, _rows);
+
+            _buffer[_rows - 1] = _buffer[_rows - 2];
+
+            if (_pool != null)
+            {
+                _buffer[_rows - 2] = _pool.Rent();
+            }
+            else
+            { 
+                _buffer[_rows - 2] = new T[_maxWidth];
+            }
+        }
+
         public IEnumerator<T> GetEnumerator()
         {
             var j = 0;

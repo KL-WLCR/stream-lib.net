@@ -93,6 +93,27 @@ namespace StreamLib.Tests.Utils
         }
 
         [Test]
+        public void ChunkArrayAddChunk()
+        {
+            var arr = new ChunkedArray(0);
+
+            arr.AddChunk();
+
+            Assert.That(arr.Length, Is.EqualTo(ChunkedArray._maxWidth));
+
+            arr[ChunkedArray._maxWidth - 1] = 100;
+
+            arr.AddChunk();
+
+            Assert.That(arr.Length, Is.EqualTo(ChunkedArray._maxWidth * 2));
+
+            Assert.That(arr[ChunkedArray._maxWidth - 1], Is.EqualTo(100));
+
+            arr[2*ChunkedArray._maxWidth - 1] = 200;
+
+        }
+
+        [Test]
         public void ChunkArraySortingPooling()
         {
             var pool = new ChunkPool(17000);

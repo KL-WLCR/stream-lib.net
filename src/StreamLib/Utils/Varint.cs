@@ -72,5 +72,23 @@ namespace StreamLib.Utils
             }
             output.WriteByte((byte)(value & 0x7F));
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteUInt32(uint value, ChunkedByteArray output, ref int position)
+        {
+            while ((value & 0xFFFFFF80) != 0)
+            {
+                if (position >= output.Length)
+                    output.AddChunk();
+
+                output[position++] = (byte)((value & 0x7F) | 0x80);
+                value >>= 7;
+            }
+
+            if (position >= output.Length)
+                output.AddChunk();
+
+            output[position++] = ((byte)(value & 0x7F));
+        }
     }
 }
