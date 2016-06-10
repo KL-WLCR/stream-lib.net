@@ -17,11 +17,16 @@ namespace StreamLib.Tests.Utils
         [Test]
         public void ChunkArrayEnumeration()
         {
-            var tst = new ChunkedArray(9);
+            var pool = new ChunkPool(ChunkedArray._maxWidth);
+
+            var tst = new ChunkedArray(0, pool);
+            tst.AddChunk();
+            tst.SetSize(1);
+            tst.SetSize(ChunkedArray._maxWidth);
 
             uint i = 0;
 
-            for (i = 0; i < 9; ++ i)
+            for (i = 0; i < ChunkedArray._maxWidth; ++ i)
             {
                 tst[i] = i;
             }
@@ -53,6 +58,7 @@ namespace StreamLib.Tests.Utils
 
             Assert.That(i, Is.EqualTo(7));
 
+            tst.Dispose();
         }
 
         class Comparer : IComparer<uint>

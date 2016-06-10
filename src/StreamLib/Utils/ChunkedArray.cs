@@ -17,6 +17,8 @@ namespace StreamLib.Utils
 
         int _rows;
         int _lastArraySize;
+        int _allocatedRows;
+        int _sizeOfLastAllocatedRow;
         int _length;
         int _capacity;
         bool _isPossibleResize;
@@ -30,12 +32,19 @@ namespace StreamLib.Utils
             _pool = pool;
             _capacity = size;
             _length = size;
+            _allocatedRows = 0;
 
             if (size > 0)
             {
                 _isPossibleResize = false;
                 _rows = (size / _maxWidth) + 1;
                 _lastArraySize = size - (_rows - 1) * _maxWidth;
+                if (_lastArraySize == 0)
+                {
+                    --_rows;
+                    _lastArraySize = _maxWidth;
+                }
+
                 _buffer = new T[_rows][];
             }
             else
@@ -52,7 +61,9 @@ namespace StreamLib.Utils
                     for (var i = 0; i < _rows; ++i)
                     {
                         _buffer[i] = pool.Rent();
+                        ++_allocatedRows;
                     }
+                    _sizeOfLastAllocatedRow = _lastArraySize;
                 }
                 else
                 {
@@ -98,6 +109,9 @@ namespace StreamLib.Utils
             if (_pool != null)
             {
                 _buffer[_rows - 1] = _pool.Rent();
+                ++_allocatedRows;
+                _sizeOfLastAllocatedRow = _maxWidth;
+
             }
             else
             { 
@@ -140,6 +154,11 @@ namespace StreamLib.Utils
             _length = size;
             _rows = (size / _maxWidth) + 1;
             _lastArraySize = size - (_rows - 1) * _maxWidth;
+            if (_lastArraySize == 0)
+            {
+                --_rows;
+                _lastArraySize = _maxWidth;
+            }
         }
 
         public void ResetToSize(int size, T initialValue)
@@ -240,12 +259,12 @@ namespace StreamLib.Utils
             {
                 var i = 0;
 
-                for (; i< _rows - 1; ++i)
+                for (; i < _allocatedRows; ++i)
                 {
-                    _pool.Free(_buffer[i], _maxWidth);
-                }
+                    var size = (i == _allocatedRows - 1) ? _sizeOfLastAllocatedRow : _maxWidth;
 
-                _pool.Free(_buffer[i], _lastArraySize);
+                    _pool.Free(_buffer[i], size );
+                }
             }
         }
 
