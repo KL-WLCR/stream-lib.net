@@ -43,6 +43,7 @@
     <Compile Include="Utils\ChunkedArray.cs" />
     <Compile Include="Utils\Bits.cs" />
     <Compile Include="Utils\HashCode.cs" />
+    <Compile Include="Utils\Streams\HllStream.cs" />
     <Compile Include="Utils\Streams\ReadOnlyMemoryStream.cs" />
     <Compile Include="Utils\Streams\ReadOnlyChunkedArrayStream.cs" />
     <Compile Include="Utils\UInt64.cs" />

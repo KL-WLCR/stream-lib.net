@@ -1,6 +1,8 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using StreamLib.Utils;
 using StreamLib.Utils.Streams;
@@ -26,7 +28,7 @@ namespace StreamLib.Cardinality
         // Maximum size of single internal array 
         const int MaxSingleArraySize = 65536;
         // Count of arrays used 
-        const int ArraysCount = 4; 
+        const int ArraysCount = 4;
 
         const int InitialTempSetCapacity = 4;
 
@@ -313,7 +315,7 @@ namespace StreamLib.Cardinality
                     case Format.Normal:
                         Varint.WriteUInt32((uint)Format.Normal, wms);
                         Varint.WriteUInt32((uint)_registerSet.M.Length * 4, wms);
-                        for(var i = 0;i< _registerSet.M.Length; ++i)
+                        for (var i = 0; i < _registerSet.M.Length; ++i)
                         {
                             wms.WriteUInt(_registerSet.M[i]);
                         }
@@ -322,7 +324,7 @@ namespace StreamLib.Cardinality
                         Varint.WriteUInt32((uint)Format.Sparse, wms);
                         Varint.WriteUInt32((uint)_sparseSet.Length, wms);
                         uint prevMergedDelta = 0;
-                        foreach ( var k in _sparseSet )
+                        foreach (var k in _sparseSet)
                         {
                             Varint.WriteUInt32(k - prevMergedDelta, wms);
                             prevMergedDelta = k;
@@ -333,6 +335,124 @@ namespace StreamLib.Cardinality
             }
         }
 
+        public IEnumerable<byte> GetVarintUint32Serializer(uint value)
+        {
+            while ((value & 0xFFFFFF80) != 0)
+            {
+                yield return (byte)((value & 0x7F) | 0x80);
+                value >>= 7;
+            }
+
+            yield return ((byte)(value & 0x7F));
+        }
+
+        public IEnumerator<byte> GetSerializer()
+        {
+            foreach (var x in GetVarintUint32Serializer(_p))
+            {
+                yield return x;
+            }
+
+            foreach (var x in GetVarintUint32Serializer(_sp))
+            {
+                yield return x;
+            }
+
+            switch (_format)
+            {
+                case Format.Normal:
+
+                    foreach (var x in GetVarintUint32Serializer((uint)Format.Normal))
+                    {
+                        yield return x;
+                    }
+
+                    foreach (var x in GetVarintUint32Serializer((uint)(uint)_registerSet.M.Length * 4))
+                    {
+                        yield return x;
+                    }
+
+                    for (var i = 0; i < _registerSet.M.Length; ++i)
+                    {
+                        yield return (byte)_registerSet.M[i];
+                        yield return (byte)(_registerSet.M[i] >> 8);
+                        yield return (byte)(_registerSet.M[i] >> 16);
+                        yield return (byte)(_registerSet.M[i] >> 24);
+                    }
+
+                    break;
+                case Format.Sparse:
+
+                    foreach (var x in GetVarintUint32Serializer((uint)Format.Sparse))
+                    {
+                        yield return x;
+                    }
+
+                    foreach (var x in GetVarintUint32Serializer((uint)_sparseSet.Length))
+                    {
+                        yield return x;
+                    }
+
+                    uint prevMergedDelta = 0;
+                    foreach (var k in _sparseSet)
+                    {
+                        foreach (var x in GetVarintUint32Serializer(k - prevMergedDelta))
+                        {
+                            yield return x;
+                        }
+
+                        prevMergedDelta = k;
+                    }
+                    break;
+            }
+
+        }
+
+        public long GetBinSize()
+        {
+            long size = 0;
+
+            // Get header size
+            foreach (var x in GetVarintUint32Serializer(_p)) { ++size; }
+            foreach (var x in GetVarintUint32Serializer(_sp)) { ++size; }
+
+            switch (_format)
+            {
+                case Format.Normal:
+
+                    foreach (var x in GetVarintUint32Serializer((uint)Format.Normal)) { ++size; }
+                    foreach (var x in GetVarintUint32Serializer((uint)(uint)_registerSet.M.Length * 4)) { ++size; }
+
+                    size += _registerSet.M.Length * 4;
+
+                    break;
+                case Format.Sparse:
+
+                    foreach (var x in GetVarintUint32Serializer((uint)Format.Sparse)) { ++size; }
+                    foreach (var x in GetVarintUint32Serializer((uint)_sparseSet.Length)) { ++size; }
+
+                    uint prevMergedDelta = 0;
+                    foreach (var k in _sparseSet)
+                    {
+                        foreach (var x in GetVarintUint32Serializer(k - prevMergedDelta)) { ++size; }
+
+                        prevMergedDelta = k;
+                    }
+
+                    break;
+            }
+
+            return size;
+        }
+
+
+        public Stream ToStream()
+        {
+            if (_format == Format.Sparse)
+                MergeTempList();
+
+            return new HllStream(this);
+        }
 
         private void WriteUInt32(uint value, ChunkedByteArray output, ref int position)
         {
@@ -349,9 +469,6 @@ namespace StreamLib.Cardinality
         {
             var position = 0;
             var result = new ChunkedByteArray(0, pool);
-
-            if (_format == Format.Sparse)
-                MergeTempList();
 
             Varint.WriteUInt32(_p, result, ref position);
             Varint.WriteUInt32(_sp, result, ref position);
@@ -389,7 +506,7 @@ namespace StreamLib.Cardinality
 
         public static ChunkPool CreateMemPool()
         {
-            return new ChunkPool(ChunkedArray._maxWidth );
+            return new ChunkPool(ChunkedArray._maxWidth);
         }
 
         public static HyperLogLogPlus FromChunkedByteArray(ChunkedByteArray bytes, ChunkPool pool = null)
@@ -398,7 +515,7 @@ namespace StreamLib.Cardinality
 
             var p = Varint.ReadUInt32(bytes, ref position);
             var sp = Varint.ReadUInt32(bytes, ref position);
-            var format = (Format)Varint.ReadUInt32(bytes, ref position);  
+            var format = (Format)Varint.ReadUInt32(bytes, ref position);
             var size = Varint.ReadUInt32(bytes, ref position);
 
             if (format == Format.Normal)
@@ -416,7 +533,7 @@ namespace StreamLib.Cardinality
                 uint prevDeltaRead = 0;
                 for (int i = 0; i < rehydratedSparseSet.Length; ++i)
                 {
-                    var nextFromStream = Varint.ReadUInt32(bytes, ref position); 
+                    var nextFromStream = Varint.ReadUInt32(bytes, ref position);
                     uint nextVal = nextFromStream + prevDeltaRead;
                     rehydratedSparseSet[i] = nextVal;
                     prevDeltaRead = nextVal;
@@ -555,8 +672,8 @@ namespace StreamLib.Cardinality
                 // of this' register set is several orders of magnitude faster than copying
                 // and converting other to normal mode. This use case is quite common since
                 // we tend to aggregate small sets to large sets.
-                foreach ( var k in other._sparseSet )
-                { 
+                foreach (var k in other._sparseSet)
+                {
                     uint idx = other.GetIndex(k, _p);
                     uint r = other.DecodeRunLength(k);
                     _registerSet.UpdateIfGreater(idx, r);
@@ -736,10 +853,10 @@ namespace StreamLib.Cardinality
 
         internal static ChunkedArray SortEncodedSet(ChunkedArray encodedSet, int validIndex, ChunkPool _pool)
         {
-            var tmpResult = new ChunkedArray ( validIndex, _pool );
+            var tmpResult = new ChunkedArray(validIndex, _pool);
             tmpResult.CopyFrom(encodedSet, validIndex);
             ChunkedArray.Sort(tmpResult, 0, validIndex, comparer);
-            return tmpResult ;
+            return tmpResult;
         }
 
         // get the idx' from an encoding
