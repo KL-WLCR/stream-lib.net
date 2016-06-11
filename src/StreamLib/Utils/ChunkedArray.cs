@@ -136,6 +136,7 @@ namespace StreamLib.Utils
             _lastArraySize = _maxWidth;
 
             Array.Resize<T[]>(ref _buffer, _rows);
+            Array.Resize<int>(ref _poolBufferId, _rows);
 
             if (_pool != null)
             {
