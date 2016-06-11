@@ -24,10 +24,11 @@ namespace StreamLib.Utils
         bool _isPossibleResize;
 
         private T[][] _buffer;
+        private int[] _poolBufferId;
 
         ChunkPool<T> _pool;
 
-        public ChunkedArray(int size, ChunkPool<T> pool = null)
+        public ChunkedArray(int size, ChunkPool<T> pool = null, bool isCleanupRented = false)
         {
             _pool = pool;
             _capacity = size;
@@ -46,6 +47,7 @@ namespace StreamLib.Utils
                 }
 
                 _buffer = new T[_rows][];
+                _poolBufferId = new int[_rows];
             }
             else
             {
@@ -60,7 +62,16 @@ namespace StreamLib.Utils
                 {
                     for (var i = 0; i < _rows; ++i)
                     {
-                        _buffer[i] = pool.Rent();
+                        var bufferId = 0;
+                        _buffer[i] = pool.Rent(out bufferId);
+                        _poolBufferId[i] = bufferId;
+
+                        if (isCleanupRented)
+                        { 
+
+                            FastArrayClear(_buffer[i], default(T), i == _rows -1 ? _lastArraySize : _maxWidth);
+                        }
+
                         ++_allocatedRows;
                     }
                     _sizeOfLastAllocatedRow = _lastArraySize;
@@ -76,6 +87,26 @@ namespace StreamLib.Utils
                 }
             }
         }
+
+        private void FastArrayClear(T[] array, T value, int freeSize)
+        {
+            int block = 32, index = 0;
+            int length = Math.Min(block, freeSize);
+
+            while (index < length)
+            {
+                array[index++] = value;
+            }
+
+            while (index < freeSize)
+            {
+                int actualBlockSize = Math.Min(block, freeSize - index);
+                Buffer.BlockCopy(array, 0, array, index << 2, actualBlockSize << 2);
+                index += block;
+                block <<= 1;
+            }
+        }
+
 
         public T[] GetChunk(int position)
         {
@@ -108,7 +139,10 @@ namespace StreamLib.Utils
 
             if (_pool != null)
             {
-                _buffer[_rows - 1] = _pool.Rent();
+                var bufferId = 0;
+                _buffer[_rows - 1] = _pool.Rent(out bufferId);
+                _poolBufferId[_rows - 1] = bufferId;
+
                 ++_allocatedRows;
                 _sizeOfLastAllocatedRow = _maxWidth;
 
@@ -257,13 +291,11 @@ namespace StreamLib.Utils
         {
             if (_pool != null)
             {
-                var i = 0;
-
-                for (; i < _allocatedRows; ++i)
+                for (var i = _allocatedRows - 1; i >=0 ; --i)
                 {
                     var size = (i == _allocatedRows - 1) ? _sizeOfLastAllocatedRow : _maxWidth;
 
-                    _pool.Free(_buffer[i], size );
+                    _pool.Free(_poolBufferId[i], size );
                 }
             }
         }

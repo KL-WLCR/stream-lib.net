@@ -7,6 +7,7 @@ using StreamLib.Cardinality;
 
 using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
 using ChunkedByteArray = StreamLib.Utils.ChunkedArray<byte>;
+using System.IO;
 
 namespace StreamLib.Tests.Cardinality
 {
@@ -132,6 +133,8 @@ namespace StreamLib.Tests.Cardinality
 
             Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
             long estimate = hll.Cardinality();
+
+            
             double err = Math.Abs(estimate - size) / (double)size;
             Console.WriteLine("Percentage error: " + err);
             Assert.That(err, Is.LessThan(0.1));
