@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace StreamLib.Utils
 {
-    public class ChunkPool<T>
+    public class ChunkPool<T> : IDisposable
     {
         T[][] _refs;
 
@@ -14,21 +14,22 @@ namespace StreamLib.Utils
         int _poolSize;
         int _requiredPoolSize;
         int _lastFree;
+        int _preallocatedSize;
+        const int _internalBuffersGrowSize = 100;
         bool[] _slots;
-        Dictionary<T[], int> _index;
 
-        public ChunkPool ( int arraySize )
+        public ChunkPool(int arraySize)
         {
-            _refs = new T[100][];
             _arraySize = arraySize;
             _poolSize = 0;
             _requiredPoolSize = 0;
             _lastFree = 0;
-            _slots = new bool[100];
-            _index = new Dictionary<T[], int>();
+            _preallocatedSize = _internalBuffersGrowSize;
+            _slots = new bool[_preallocatedSize];
+            _refs = new T[_preallocatedSize][];
         }
 
-        public T[] Rent()
+        public T[] Rent(out int bufferId)
         {
             EnlargePool();
 
@@ -45,13 +46,16 @@ namespace StreamLib.Utils
             _lastFree++;
             if (_poolSize == _lastFree) _lastFree = 0;
 
+            bufferId = _retPos;
             return _refs[_retPos];
         }
 
-        public void Free(T[] array, int freeSize)
+        public void Free(int bufferId, int freeSize)
         {
-            _slots[_index[array]] = false;
-            Array.Clear(array, 0, freeSize);
+            _slots[bufferId] = false;
+
+            _lastFree = bufferId;
+
             ShrikPool();
         }
 
@@ -61,14 +65,17 @@ namespace StreamLib.Utils
 
             if (_poolSize < _requiredPoolSize)
             {
-                Array.Resize<T[]>(ref _refs, _requiredPoolSize);
-                Array.Resize<bool>(ref _slots, _requiredPoolSize);
+                if (_preallocatedSize < _requiredPoolSize)
+                {
+                    Array.Resize<T[]>(ref _refs, _requiredPoolSize + _internalBuffersGrowSize);
+                    Array.Resize<bool>(ref _slots, _requiredPoolSize + _internalBuffersGrowSize);
+                    _preallocatedSize = _requiredPoolSize + _internalBuffersGrowSize;
+                }
 
                 for (var i = _poolSize; i < _requiredPoolSize; ++i)
                 {
                     _refs[i] = new T[_arraySize];
                     _slots[i] = false;
-                    _index.Add(_refs[i], i);
                 }
 
                 _poolSize = _requiredPoolSize;
@@ -79,6 +86,12 @@ namespace StreamLib.Utils
         private void ShrikPool()
         {
             --_requiredPoolSize;
+        }
+
+
+        public void Dispose()
+        {
+
         }
 
     }

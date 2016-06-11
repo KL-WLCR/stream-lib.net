@@ -22,7 +22,7 @@ namespace StreamLib.Cardinality
         {
             Count = count;
             _pool = pool;
-            M = initialValues ?? new ChunkedArray((int)GetSizeForCount(count), pool);
+            M = initialValues ?? new ChunkedArray((int)GetSizeForCount(count), pool, true);
         }
 
         public override string ToString()
