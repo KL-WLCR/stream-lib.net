@@ -5,6 +5,10 @@ using System.Linq;
 using NUnit.Framework;
 using StreamLib.Cardinality;
 
+using ChunkedArray = StreamLib.Utils.ChunkedArray<uint>;
+using ChunkedByteArray = StreamLib.Utils.ChunkedArray<byte>;
+using System.IO;
+
 namespace StreamLib.Tests.Cardinality
 {
     [TestFixture]
@@ -97,6 +101,7 @@ namespace StreamLib.Tests.Cardinality
 
             var hll = new HyperLogLogPlus(18, 25);
             const int size = (int)10e6;
+
             for (int i = 0; i < size; ++i)
             {
                 var buf = new byte[8];
@@ -112,6 +117,110 @@ namespace StreamLib.Tests.Cardinality
         }
 
         [Test]
+        public void HighCardinalityWithPool()
+        {
+            var sw = Stopwatch.StartNew();
+            var pool = HyperLogLogPlus.CreateMemPool();
+            var hll = new HyperLogLogPlus(18, 25, pool);
+            const int size = (int)10e6;
+
+            for (int i = 0; i < size; ++i)
+            {
+                var buf = new byte[8];
+                Rnd.NextBytes(buf);
+                hll.OfferHashed(Hash64(buf));
+            }
+
+            Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
+            long estimate = hll.Cardinality();
+
+            
+            double err = Math.Abs(estimate - size) / (double)size;
+            Console.WriteLine("Percentage error: " + err);
+            Assert.That(err, Is.LessThan(0.1));
+        }
+
+        [Test]
+        public void HighCardinalityMerge()
+        {
+            var sw = Stopwatch.StartNew();
+
+            var hll = new HyperLogLogPlus(18, 25);
+            var hll_t = new HyperLogLogPlus(18, 25);
+            var buf = new byte[8];
+
+            const int size = (int)100000;
+
+            for (int i = 0; i < size / 100; ++i)
+            {
+                var hll3 = new HyperLogLogPlus(18, 25);
+
+                for (int j = 0; j < 100; ++j)
+                {
+                    Rnd.NextBytes(buf);
+                    hll3.OfferHashed(Hash64(buf));
+                }
+
+                hll_t = hll.Merge(hll3);
+
+                hll.Dispose();
+
+                hll = hll_t;
+
+                hll3.Dispose();
+            }
+
+            Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
+            long estimate = hll.Cardinality();
+            double err = Math.Abs(estimate - size) / (double)size;
+            Console.WriteLine("Percentage error: " + err);
+            Assert.That(err, Is.LessThan(0.1));
+
+            hll.Dispose();
+        }
+
+        [Test]
+        public void HighCardinalityMergeWithPool()
+        {
+            var sw = Stopwatch.StartNew();
+
+            var pool = HyperLogLogPlus.CreateMemPool();
+            var hll = new HyperLogLogPlus(18, 25, pool);
+            var hll_t = new HyperLogLogPlus(18, 25, pool);
+            var buf = new byte[8];
+
+            const int size = (int)100000;
+
+            for (int i = 0; i < size / 100; ++i)
+            {
+                var hll3 = new HyperLogLogPlus(18, 25, pool);
+
+                for (int j = 0; j < 100; ++j)
+                {
+                    Rnd.NextBytes(buf);
+                    hll3.OfferHashed(Hash64(buf));
+                }
+
+                hll_t = hll.Merge(hll3);
+
+                hll.Dispose();
+
+                hll = hll_t;
+
+                hll3.Dispose();
+            }
+            
+            Console.WriteLine("expected: {0}, estimate: {1}, time: {2}", size, hll.Cardinality(), sw.Elapsed);
+            long estimate = hll.Cardinality();
+            double err = Math.Abs(estimate - size) / (double)size;
+            Console.WriteLine("Percentage error: " + err);
+            Assert.That(err, Is.LessThan(0.1));
+
+            hll.Dispose();
+
+        }
+
+        [Test]
         public void Serialization_Normal()
         {
             var hll = new HyperLogLogPlus(5, 25);
@@ -120,6 +229,18 @@ namespace StreamLib.Tests.Cardinality
             Console.WriteLine(hll.Cardinality());
 
             var hll2 = HyperLogLogPlus.FromBytes(hll.ToBytes());
+            Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
+        }
+
+        [Test]
+        public void Serialization_Normal_FromChunked()
+        {
+            var hll = new HyperLogLogPlus(5, 25);
+            for (var i = 0; i < 100000; ++i)
+                hll.OfferHashed(Hash64(i));
+            Console.WriteLine(hll.Cardinality());
+
+            var hll2 = HyperLogLogPlus.FromChunkedByteArray(hll.ToChunkedByteArray());
             Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
         }
 
@@ -138,17 +259,17 @@ namespace StreamLib.Tests.Cardinality
         }
 
         [Test]
-        public void SortEncodedSet()
+        public void Serialization_Sparse_FromChunked()
         {
-            var testSet = new uint[]
-            {
-                655403,
-                655416,
-                655425
-            };
+            var hll = new HyperLogLogPlus(14, 25);
+            hll.OfferHashed(Hash64("a"));
+            hll.OfferHashed(Hash64("b"));
+            hll.OfferHashed(Hash64("c"));
+            hll.OfferHashed(Hash64("d"));
+            hll.OfferHashed(Hash64("e"));
 
-            var sorted = HyperLogLogPlus.SortEncodedSet(testSet, 3);
-            Assert.That(sorted, Is.EqualTo(new[] {655403, 655425, 655416}));
+            var hll2 = HyperLogLogPlus.FromChunkedByteArray(hll.ToChunkedByteArray());
+            Assert.That(hll2.Cardinality(), Is.EqualTo(hll.Cardinality()));
         }
 
         [Test]
@@ -174,6 +295,31 @@ namespace StreamLib.Tests.Cardinality
                 }
             }
         }
+
+        [Test]
+        public void MergeSelf_ForceNormal_FromChunked()
+        {
+            int[] cardinalities = { 0, 1, 10, 100, 1000, 10000, 100000, 1000000 };
+            foreach (var cardinality in cardinalities)
+            {
+                for (uint j = 4; j < 24; ++j)
+                {
+                    Console.WriteLine("p=" + j);
+                    var hll = new HyperLogLogPlus(j, 0);
+                    for (var l = 0; l < cardinality; l++)
+                        hll.OfferHashed(Hash64(Rnd.Next()));
+
+                    Console.WriteLine("hllcardinality={0} cardinality={1}", hll.Cardinality(), cardinality);
+
+                    var deserialized = HyperLogLogPlus.FromChunkedByteArray(hll.ToChunkedByteArray());
+                    Assert.That(deserialized.Cardinality(), Is.EqualTo(hll.Cardinality()));
+                    var merged = hll.Merge(deserialized);
+                    Console.WriteLine(merged.Cardinality() + " : " + hll.Cardinality());
+                    Assert.That(merged.Cardinality(), Is.EqualTo(hll.Cardinality()));
+                }
+            }
+        }
+
 
         [Test]
         public void MergeSelf()

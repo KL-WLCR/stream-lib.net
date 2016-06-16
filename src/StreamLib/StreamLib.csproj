@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>StreamLib</RootNamespace>
     <AssemblyName>StreamLib</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -39,9 +40,13 @@
   <ItemGroup>
     <Compile Include="Cardinality\HyperLogLogPlus.cs" />
     <Compile Include="Cardinality\LinearCounter.cs" />
+    <Compile Include="Utils\ChunkPool.cs" />
+    <Compile Include="Utils\ChunkedArray.cs" />
     <Compile Include="Utils\Bits.cs" />
     <Compile Include="Utils\HashCode.cs" />
+    <Compile Include="Utils\Streams\HllStream.cs" />
     <Compile Include="Utils\Streams\ReadOnlyMemoryStream.cs" />
+    <Compile Include="Utils\Streams\ReadOnlyChunkedArrayStream.cs" />
     <Compile Include="Utils\UInt64.cs" />
     <Compile Include="Utils\UInt32.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
